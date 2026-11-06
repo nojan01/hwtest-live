@@ -1,0 +1,7 @@
+// HPE Live (nur interner Einsatz): Mitglieder von "sudo" (Live-User) dürfen alle
+// polkit-Aktionen ohne Passwort ausführen (pkexec aus Hardwaretest heraus).
+polkit.addRule(function(action, subject) {
+    if (subject.isInGroup("sudo")) {
+        return polkit.Result.YES;
+    }
+});

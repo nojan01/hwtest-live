@@ -1,0 +1,24 @@
+#!/bin/sh
+# SSH-Server im laufenden Live-System starten/stoppen (für scp/sftp/WinSCP).
+# Login: user / live
+set -u
+case "${1:-start}" in
+    start)
+        ssh-keygen -A >/dev/null 2>&1   # Host-Keys erzeugen, falls nicht vorhanden
+        systemctl start ssh.service || { echo "SSH-Server konnte nicht gestartet werden"; exit 1; } ;;
+    stop)
+        systemctl stop ssh.service ssh.socket 2>/dev/null; echo "SSH-Server gestoppt"; exit 0 ;;
+    status) ;;
+    *) echo "Aufruf: hpe-live-ssh [start|stop|status]"; exit 2 ;;
+esac
+if systemctl is-active -q ssh.service; then
+    echo "SSH-Server läuft. Login: user / live"
+    echo
+    ip -4 -o addr show scope global | awk '{split($4,a,"/"); printf "  %-12s ssh user@%s\n", $2, a[1]}'
+    echo
+    echo "Reports/Logs liegen in /home/user/Downloads, z. B.:"
+    ip -4 -o addr show scope global | awk 'NR==1{split($4,a,"/"); printf "  scp -r user@%s:Downloads .\n", a[1]}'
+    echo "  (Windows: WinSCP, Protokoll SFTP)"
+else
+    echo "SSH-Server läuft nicht (Start: sudo hpe-live-ssh start)"
+fi

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Startet Hardwaretest nach dem Login (der JSON Viewer wird aus Hardwaretest heraus geöffnet).
+# Abschaltbar mit Kernel-Parameter "hpe-live.noapps".
+grep -qw 'hpe-live.noapps' /proc/cmdline && exit 0
+exec hardwaretest

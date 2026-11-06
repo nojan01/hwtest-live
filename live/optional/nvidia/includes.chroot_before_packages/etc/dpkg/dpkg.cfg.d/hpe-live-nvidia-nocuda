@@ -1,0 +1,9 @@
+# HPE Live (NVIDIA=driver, ohne DCGM): CUDA-Runtime/JIT-Compiler nicht
+# entpacken. nvidia-smi benötigt nur libnvidia-ml. Wird bei NVIDIA=dcgm vom
+# Build-Skript entfernt.
+path-exclude=/usr/lib/x86_64-linux-gnu/libcuda.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-nvvm70.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-gpucomp.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-tileiras.so*

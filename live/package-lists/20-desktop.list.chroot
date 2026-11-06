@@ -1,0 +1,25 @@
+# --- Minimale grafische Oberfläche (kein Desktop-Environment) ---------------
+xserver-xorg-core
+xserver-xorg-legacy
+xserver-xorg-input-libinput
+xserver-xorg-video-fbdev
+xserver-xorg-video-vesa
+xinit
+x11-xkb-utils
+x11-xserver-utils
+# Caps-Lock-Reset fuer die iLO-Konsole (hpe-live-keyboard-reset)
+xdotool
+openbox
+tint2
+xterm
+surf
+lxpolkit
+# Netzwerk-Tray-Icon + grafischer Verbindungseditor (nm-connection-editor)
+network-manager-applet
+fonts-dejavu-core
+# Dateimanager (inkl. Einhängen von USB-Laufwerken) und Hintergrundbild
+pcmanfm
+gvfs
+udisks2
+feh
+desktop-file-utils

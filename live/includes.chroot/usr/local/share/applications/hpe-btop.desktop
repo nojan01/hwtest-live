@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=btop
+Exec=x-terminal-emulator -T btop -e btop
+Icon=btop
+Terminal=false
+Categories=System;

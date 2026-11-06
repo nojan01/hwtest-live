@@ -1,0 +1,9 @@
+# --- HPE-Tools aus dem HPE MCP-Repository -----------------------------------
+# ilorest wird vom Build-Skript aus dem offiziellen RPM in ein .deb umgepackt
+# (config/packages.chroot/ilorest_*.deb).
+ssacli
+ssaducli
+hponcfg
+storcli
+storcli2
+amsd

@@ -1,0 +1,20 @@
+#!/bin/sh
+# Tastatur im Live-Desktop zuruecksetzen.
+# Die iLO-HTML5-Konsole gleicht den Caps-Lock-Zustand des Browsers per simuliertem
+# Tastendruck ab; dadurch bleibt im Live-System oft der Lock-Modifier haengen
+# (alles gross, erst Feststelltaste macht klein). Abhilfe: Lock loeschen und
+# Caps Lock per XKB-Option deaktivieren (caps:none) – im Live-System nicht noetig.
+LAYOUT=de VARIANT= OPTIONS=
+if [ -r /etc/default/keyboard ]; then
+    . /etc/default/keyboard
+    LAYOUT="${XKBLAYOUT:-de}"; VARIANT="$XKBVARIANT"; OPTIONS="$XKBOPTIONS"
+fi
+# 1) Standard-Map mit aktivem Caps Lock laden, damit ein haengender Lock geloescht werden kann
+setxkbmap -layout "$LAYOUT" ${VARIANT:+-variant "$VARIANT"} ${OPTIONS:+-option "$OPTIONS"} 2>/dev/null
+if xset q 2>/dev/null | grep -q 'Caps Lock: *on' && command -v xdotool >/dev/null 2>&1; then
+    xdotool key Caps_Lock
+fi
+# 2) Caps Lock dauerhaft stilllegen
+setxkbmap -layout "$LAYOUT" ${VARIANT:+-variant "$VARIANT"} \
+    -option "${OPTIONS:+$OPTIONS,}caps:none" 2>/dev/null
+echo "Tastatur: Layout $LAYOUT, Caps Lock deaktiviert."

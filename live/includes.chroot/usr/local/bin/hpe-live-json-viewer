@@ -1,0 +1,4 @@
+#!/bin/sh
+# JSON Viewer (Tauri/WebKitGTK); das Paket installiert das Binary als /usr/bin/app.
+. /usr/local/lib/hpe-live/clean-env.sh
+exec /usr/bin/app "$@"

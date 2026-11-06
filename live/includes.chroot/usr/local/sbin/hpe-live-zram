@@ -1,0 +1,14 @@
+#!/bin/sh
+# Swap im RAM (zram, zstd-komprimiert): das Live-System fasst die Server-Platten nicht an.
+# Größe: 1/4 des RAM, höchstens 8 GiB. Abschaltbar mit Kernel-Parameter "hpe-live.noswap".
+# Der fstab-Eintrag sorgt dafür, dass "swapon -a" (z.B. aus Hardwaretest) den Swap wieder aktiviert.
+grep -qw 'hpe-live.noswap' /proc/cmdline && exit 0
+modprobe zram num_devices=1 || exit 0
+mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+size_kb=$((mem_kb / 4))
+[ "$size_kb" -le 8388608 ] || size_kb=8388608
+zramctl /dev/zram0 --algorithm zstd --size "${size_kb}K" 2>/dev/null \
+    || zramctl /dev/zram0 --size "${size_kb}K" || exit 0
+mkswap -L hpe-zram /dev/zram0 >/dev/null
+grep -q '^/dev/zram0[[:space:]]' /etc/fstab || echo '/dev/zram0 none swap defaults,pri=100 0 0' >>/etc/fstab
+swapon -p 100 /dev/zram0

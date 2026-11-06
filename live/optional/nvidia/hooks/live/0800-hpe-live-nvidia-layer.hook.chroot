@@ -1,0 +1,67 @@
+#!/bin/sh
+# Ermittelt die Dateien des NVIDIA-/CUDA-/DCGM-Paketsatzes für eine eigene
+# Squashfs-Schicht (live/nvidia.squashfs). Das Build-Skript schließt diese
+# Dateien aus der Basis (filesystem.squashfs) aus, der Binary-Hook
+# 0100-hpe-live-nvidia-layer.hook.binary packt sie separat. Der Bootmenü-
+# Eintrag „ohne NVIDIA-Treiber (nouveau)“ lädt dann nur die Basis in den RAM.
+set -eu
+
+OUT=/var/lib/hpe-live/nvidia-layer
+mkdir -p "$OUT"
+rm -f "$OUT/packages" "$OUT/files"
+
+installed() {
+    dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' | awk '$1 ~ /^ii/ {print $2}'
+}
+
+# Paketsatz: Treiber, CUDA-Runtime, DCGM (firmware-nvidia-graphics = nouveau bleibt in der Basis)
+SEED=$(installed | grep -E '^(nvidia-|libnvidia-|libcuda|libcudadebugger|libnvoptix|libnvjitlink|firmware-nvidia-gsp|datacenter-gpu-manager|dcgmi|libdcgm)' || true)
+if [ -z "$SEED" ]; then
+    echo "hpe-live: keine NVIDIA-Pakete installiert - keine eigene Schicht"
+    exit 0
+fi
+
+# Abhängigkeiten, die ausschließlich dieser Paketsatz braucht, über die
+# apt-Simulation „purge --auto-remove“ mitnehmen.
+# shellcheck disable=SC2086
+PKGS=$(DEBIAN_FRONTEND=noninteractive apt-get -s purge --auto-remove $SEED 2>/dev/null \
+    | awk '/^(Purg|Remv) /{sub(/:.*/, "", $2); print $2}' | sort -u || true)
+if [ -z "$PKGS" ]; then
+    echo "hpe-live: apt-Simulation lieferte nichts - verwende nur den Paketsatz selbst"
+    PKGS=$(printf '%s\n' $SEED | sort -u)
+fi
+
+# Kein manuell installiertes Paket außerhalb des Satzes darf mit verschwinden
+MANUAL=$(apt-mark showmanual 2>/dev/null | sed 's/:.*//' || true)
+for p in $PKGS; do
+    case " $(printf '%s ' $SEED)" in *" $p "*) continue ;; esac
+    if printf '%s\n' "$MANUAL" | grep -qx "$p"; then
+        echo "hpe-live: FEHLER - $p ist manuell installiert, hängt aber nur über NVIDIA-Pakete im System" >&2
+        exit 1
+    fi
+done
+printf '%s\n' $PKGS >"$OUT/packages"
+
+# Nur Dateien und Symlinks (keine Verzeichnisse - die teilen sich mehrere Pakete)
+{
+    for p in $PKGS; do dpkg -L "$p" 2>/dev/null; done
+    # DKMS-Module (nicht paketverwaltet) und systemd-Verknüpfungen/Drop-ins
+    find /usr/lib/modules -path '*/updates/dkms/nvidia*' 2>/dev/null
+    find /etc/systemd/system \( -type f -o -type l \) -path '*nvidia-*' 2>/dev/null
+} | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    # Verzeichnisse überspringen - auch usrmerge-Symlinks wie /lib, die dpkg -L mit auflistet
+    [ -d "$f" ] && continue
+    if [ -L "$f" ] || [ -f "$f" ]; then
+        # Verzeichnisanteil kanonisch (/lib -> /usr/lib), damit mksquashfs-Ausschluss
+        # und rsync dieselben Pfade sehen; der Eintrag selbst bleibt (Symlinks!)
+        printf '%s/%s\n' "$(readlink -f "$(dirname "$f")")" "$(basename "$f")"
+    fi
+done | sort -u >"$OUT/files"
+
+n=$(wc -l <"$OUT/files")
+size=$(xargs -d '\n' -a "$OUT/files" du -scLm 2>/dev/null | tail -n1 | cut -f1 || echo '?')
+echo "hpe-live: NVIDIA-Schicht: $(wc -l <"$OUT/packages") Pakete, $n Dateien, ca. ${size} MB:"
+printf '%s\n' $PKGS | sed 's/^/  /'
+grep -q '/nvidia-smi$' "$OUT/files" || { echo "hpe-live: FEHLER - nvidia-smi nicht in der Dateiliste" >&2; exit 1; }
+grep -q '/nvidia\.ko' "$OUT/files" || { echo "hpe-live: FEHLER - nvidia-Kernelmodul nicht in der Dateiliste" >&2; exit 1; }

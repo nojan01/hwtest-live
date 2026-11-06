@@ -1,0 +1,4 @@
+#!/bin/sh
+# Hardwaretest sucht den JSON Viewer per "which app" – dieser Wrapper liegt im PATH
+# vor /usr/bin/app und setzt die WebKitGTK-Variablen für iLO-/VM-Grafik.
+exec hpe-live-json-viewer "$@"

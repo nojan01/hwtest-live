@@ -1,0 +1,7 @@
+# --- Firmware für typische ProLiant-NICs/HBAs (bewusst nicht "alles") -------
+firmware-bnx2
+firmware-bnx2x
+firmware-qlogic
+firmware-netxen
+firmware-intel-misc
+firmware-misc-nonfree

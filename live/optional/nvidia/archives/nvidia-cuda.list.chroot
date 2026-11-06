@@ -1,0 +1,3 @@
+# NVIDIA CUDA-Repository (nur für datacenter-gpu-manager / DCGM)
+# Key: 0218 2E60 104F CDC2 6EAE  1B85 97A5 D4CB 8793 F200 (cuda-keyring 1.1-1)
+deb https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/ /

@@ -1,0 +1,13 @@
+# --- Grafikkarten (Consumer und Workstation): AMD, Intel, NVIDIA --------------
+# Kernelmodule amdgpu/radeon, i915/xe und nouveau bleiben im Image (Slim-Hook).
+# firmware-nvidia-graphics (nouveau) ergänzt das Build-Skript in allen Varianten:
+# ohne proprietären Treiber als Standard, sonst für den Bootmenü-Eintrag
+# „ohne NVIDIA-Treiber (nouveau)“.
+firmware-amd-graphics
+firmware-intel-graphics
+# Vulkan für den herstellerneutralen GPU-Lasttest (RADV, ANV, NVK)
+mesa-vulkan-drivers
+vulkan-tools
+# System-Python startet den Vulkan-Worker ohne die Bibliotheken des
+# PyInstaller-Bundles (sonst lädt Mesa ältere libstdc++/libz aus _internal).
+python3

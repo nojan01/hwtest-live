@@ -1,0 +1,14 @@
+# --- NVIDIA Compute-Treiber (headless, ohne X/GL) ---------------------------
+# Quelle: NVIDIA CUDA-Repo für Debian 13, Version per Pinning festgelegt
+# (siehe archives/nvidia-cuda.pref.chroot).
+# @NVIDIA_KMOD_PACKAGE@ wird vom Build-Skript ersetzt
+# (nvidia-kernel-open-dkms oder nvidia-kernel-dkms).
+@NVIDIA_KMOD_PACKAGE@
+firmware-nvidia-gsp
+# nvidia-driver-cuda enthält nvidia-smi (das Paket "nvidia-smi" ist dort nur
+# ein leeres Übergangspaket). Große, nicht benötigte Bibliotheken werden per
+# dpkg path-exclude gar nicht erst entpackt (etc/dpkg/dpkg.cfg.d/).
+nvidia-driver-cuda
+libnvidia-ml1
+nvidia-persistenced
+nvidia-modprobe

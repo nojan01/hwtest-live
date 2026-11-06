@@ -1,0 +1,154 @@
+#!/bin/sh
+# Prüft, ob alle Werkzeuge und Kernelmodule des HPE-Live-Systems vorhanden sind.
+#   hpe-live-check            -> Ausgabe auf stdout, Exit 1 bei fehlenden Teilen
+#   hpe-live-check --build    -> Build-Modus (im chroot, keine Laufzeit-Checks)
+MODE=${1:-}
+KVER=$(ls /lib/modules | sort -V | tail -n1)
+[ "$MODE" = "--build" ] || KVER=$(uname -r)
+VARIANT=none
+[ -r /etc/hpe-live-release ] && . /etc/hpe-live-release
+VARIANT=${HPE_LIVE_NVIDIA:-none}
+
+missing=0
+ok()   { printf '  [ OK ] %s\n' "$*"; }
+bad()  { printf '  [FEHLT] %s\n' "$*"; missing=$((missing + 1)); }
+
+check_cmd() {
+    for c in "$@"; do
+        p=$(command -v "$c" 2>/dev/null) || p=""
+        if [ -n "$p" ]; then ok "$c ($p)"; else bad "Programm $c"; fi
+    done
+}
+check_file() {
+    if [ -e "$1" ]; then ok "$1"; else bad "Datei $1"; fi
+}
+check_mod() {
+    if modinfo -k "$KVER" "$1" >/dev/null 2>&1; then ok "Kernelmodul $1"; else bad "Kernelmodul $1 (Kernel $KVER)"; fi
+}
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+echo "Hardwaretest Live Systemcheck (Variante: $VARIANT, Kernel: $KVER)"
+echo "Apps:"
+check_cmd hardwaretest
+check_file /opt/hardwaretest/hardwaretest
+check_file /usr/bin/app
+check_cmd hpe-live-json-viewer surf firefox
+if [ "$(command -v app)" = /usr/local/bin/app ]; then ok "app -> /usr/local/bin/app (JSON Viewer aus Hardwaretest)"; else bad "app nicht als /usr/local/bin/app im PATH"; fi
+if [ -d /opt/hardwaretest/_internal ]; then
+    for t in journalctl fio xterm; do
+        if env LD_LIBRARY_PATH=/opt/hardwaretest/_internal "$t" --version >/dev/null 2>&1 \
+            || env LD_LIBRARY_PATH=/opt/hardwaretest/_internal "$t" -version >/dev/null 2>&1; then
+            ok "$t startet mit Hardwaretest-LD_LIBRARY_PATH"
+        else
+            bad "$t bricht mit Hardwaretest-LD_LIBRARY_PATH ab"
+        fi
+    done
+fi
+if [ -n "$(find /opt/hardwaretest -path '*vendor/prime95/mprime' -type f 2>/dev/null | head -n1)" ]; then
+    ok "mprime (Hardwaretest-Bundle)"
+else
+    bad "mprime im Hardwaretest-Bundle"
+fi
+echo "Diagnose-Tools:"
+check_cmd btop htop stress-ng fio iperf3 nvme smartctl hdparm sg_inq mdadm lvm pvs \
+    lsblk swapon swapoff mkfs.ext4 lshw lspci lsusb dmidecode sensors edac-util ras-mc-ctl \
+    ipmitool jq pkexec sudo zpool zfs fastfetch zramctl
+if dpkg -s memtest86+ >/dev/null 2>&1 && ls /boot/memtest86+* >/dev/null 2>&1; then
+    ok "memtest86+ (Paket, fuer Hardwaretest-Pruefung)"
+else
+    bad "memtest86+ Paket"
+fi
+echo "Netzwerk:"
+check_cmd ethtool mstlink sshd hpe-live-ssh hpe-live-collect-logs hpe-live-collect-samples hwtest-pack-reports zip NetworkManager nmcli nmtui nm-applet nm-connection-editor
+if grep -qx 'PasswordAuthentication yes' /etc/ssh/sshd_config.d/10-hpe-live.conf 2>/dev/null; then ok "sshd: Passwort-Login erlaubt"; else bad "sshd: Passwort-Login gesperrt"; fi
+echo "HPE-Tools:"
+check_cmd ssacli ssaducli hponcfg ilorest storcli64 storcli2 amsd
+if [ -s /var/lib/hpe-live/vendor-tools ]; then
+    echo "Hersteller-Werkzeuge (internes ISO, --vendor-tools):"
+    while read -r pkg ver; do
+        [ -n "$pkg" ] || continue
+        if dpkg-query -W -f='${db:Status-Abbrev}' "$pkg" 2>/dev/null | grep -q '^ii'; then ok "Paket $pkg $ver"; else bad "Paket $pkg $ver"; fi
+    done </var/lib/hpe-live/vendor-tools
+    for c in qaucli hbacmd mlxlink mlxcables mst; do
+        p=$(command -v "$c" 2>/dev/null) || p=$(find /opt -maxdepth 4 -type f -name "$c" 2>/dev/null | head -n1)
+        [ -z "$p" ] || ok "$c ($p)"
+    done
+else
+    echo "Hersteller-Werkzeuge: keine (externes ISO) - FC-HBA/Ethernet-Diagnose nur über sysfs/ethtool"
+fi
+echo "Kernelmodule:"
+check_mod zfs
+check_mod hpilo
+check_mod sg
+check_mod mgag200
+echo "Grafik (AMD, Intel, NVIDIA):"
+check_mod amdgpu
+check_mod radeon
+check_mod i915
+check_mod xe
+check_mod nouveau
+check_file /lib/firmware/amdgpu
+check_file /lib/firmware/i915
+check_file /lib/firmware/xe
+check_file /lib/firmware/nvidia
+check_cmd python3
+if python3 -I -c "import ctypes, json, argparse" 2>/dev/null; then ok "python3 ctypes/json"; else bad "python3 ctypes/json"; fi
+check_cmd vulkaninfo
+for icd in radeon intel nouveau; do
+    if ls /usr/share/vulkan/icd.d/${icd}_icd*.json >/dev/null 2>&1; then ok "Vulkan-Treiber ${icd}"; else bad "Vulkan-Treiber ${icd}"; fi
+done
+if [ "$VARIANT" != "none" ] && [ "$MODE" != "--build" ] && grep -qw 'hpe-live.nouveau' /proc/cmdline; then
+    echo "NVIDIA:"
+    printf '  [INFO] Gestartet ohne NVIDIA-Treiber: nvidia.squashfs nicht geladen, NVIDIA-GPUs laufen über nouveau/NVK\n'
+elif [ "$VARIANT" != "none" ]; then
+    echo "NVIDIA:"
+    check_cmd nvidia-smi nvidia-modprobe
+    if find "/lib/modules/$KVER" -name 'nvidia.ko*' 2>/dev/null | grep -q .; then
+        ok "NVIDIA-Kernelmodul ($(find "/lib/modules/$KVER" -name 'nvidia.ko*' | head -n1 | xargs basename))"
+    else
+        bad "NVIDIA-Kernelmodul"
+    fi
+    if [ "$VARIANT" = "dcgm" ]; then
+        check_cmd dcgmi nv-hostengine
+    fi
+fi
+
+if [ "$MODE" != "--build" ]; then
+    echo "Laufzeit:"
+    if [ -e /dev/hpilo ] || ls /dev/hpilo* >/dev/null 2>&1; then
+        ok "/dev/hpilo (iLO-Kanal aktiv)"
+    else
+        printf '  [INFO] /dev/hpilo fehlt (kein HPE-Server oder iLO-Treiber nicht geladen)\n'
+    fi
+    if id -nG user 2>/dev/null | grep -qw systemd-journal; then
+        ok "Benutzer user darf Kernel-/MCE-Journal lesen"
+    else
+        bad "Benutzer user nicht in Gruppe systemd-journal (MCE-Logs in Hardwaretest leer)"
+    fi
+    if [ -d /home/user/Downloads ] && [ "$(stat -c %U /home/user/Downloads)" = user ]; then
+        ok "/home/user/Downloads gehört user"
+    else
+        bad "/home/user/Downloads fehlt oder gehört nicht user"
+    fi
+    if grep -qw 'hpe-live.noswap' /proc/cmdline; then
+        printf '  [INFO] Swap abgeschaltet (hpe-live.noswap)\n'
+    elif grep -q '^/dev/zram0' /proc/swaps; then
+        ok "Swap aktiv (zram, $(awk '/^\/dev\/zram0/ {printf "%d MiB", $3/1024}' /proc/swaps))"
+    else
+        bad "Swap (zram) nicht aktiv"
+    fi
+    if [ -r /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c ] \
+       && [ "$(od -An -t u1 -j4 -N1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c 2>/dev/null | tr -d ' ')" = "1" ]; then
+        printf '  [WARN] Secure Boot aktiv: DKMS-Module (ZFS/NVIDIA) lassen sich nicht laden!\n'
+    fi
+fi
+
+echo
+if [ "$missing" -eq 0 ]; then
+    echo "Ergebnis: alles vorhanden."
+else
+    echo "Ergebnis: $missing Komponente(n) fehlen."
+fi
+[ "$missing" -eq 0 ]

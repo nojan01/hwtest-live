@@ -1,0 +1,8 @@
+# HPE Live (NVIDIA): Grafik-/Video-/OpenCL-Bibliotheken des Treibers nicht
+# entpacken - im headless Testsystem unnötig und sehr groß.
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvoptix.so*
+path-exclude=/usr/share/nvidia/nvoptix.bin
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-opencl.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvcuvid.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libcudadebugger.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libnvidia-present.so*

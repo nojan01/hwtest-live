@@ -1,0 +1,5 @@
+#!/bin/sh
+# Kein Firefox im Live-System: Hardwaretest sucht für HTML-Reports nach "firefox".
+# Stattdessen öffnet surf (WebKitGTK, teilt sich die Bibliothek mit dem JSON Viewer).
+. /usr/local/lib/hpe-live/clean-env.sh
+exec surf "$@"

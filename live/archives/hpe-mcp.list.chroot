@@ -1,0 +1,3 @@
+# HPE Management Component Pack (ssacli, ssaducli, hponcfg, storcli, storcli2, amsd)
+# Signiert mit HPE-Key 9E8C 4A25 C494 08EF A8D0  9D96 E3FE 26E7 74C3 A4A2 (hpePublicKey2048_key2)
+deb https://downloads.linux.hpe.com/SDR/repo/mcp/debian trixie/current non-free

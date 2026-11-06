@@ -1,0 +1,61 @@
+#!/bin/sh
+# Systemkonfiguration des Live-Images.
+set -eu
+
+# Netzwerk: NetworkManager verwaltet alle Interfaces (Auto-DHCP auf Ethernet)
+systemctl enable NetworkManager.service
+systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
+# SSH nur auf Wunsch (Kernel-Parameter hpe-live.ssh)
+systemctl disable ssh.service ssh.socket 2>/dev/null || true
+systemctl enable hpe-live-boot.service hpe-live-zram.service
+systemctl enable amsd.service 2>/dev/null || true
+# Für ein RAM-System unnötig
+systemctl disable apt-daily.timer apt-daily-upgrade.timer e2scrub_all.timer \
+    fstrim.timer dpkg-db-backup.timer 2>/dev/null || true
+systemctl mask mdmonitor.service mdcheck_start.timer mdcheck_continue.timer \
+    mdmonitor-oneshot.timer zfs-zed.service 2>/dev/null || true
+
+# Hardwaretest legt Reports per sudo in ~/Downloads ab; existiert der Ordner nicht,
+# entsteht er root-eigen und HTML-Reports lassen sich danach nicht schreiben.
+mkdir -p /etc/skel/Downloads
+
+# Workaround-Platzhalter für den storcli-postinst entfernen, 32-bit-Binary weg
+rm -f /opt/hpe/storcli/storcli /opt/MegaRAID/storcli/storcli
+rmdir /opt/hpe/storcli /opt/hpe 2>/dev/null || true
+
+# StorCLI liegt unter /opt/MegaRAID - in den PATH verlinken
+for f in /opt/MegaRAID/storcli/storcli64 /opt/MegaRAID/storcli2/storcli2; do
+    [ -x "$f" ] && ln -sf "$f" "/usr/local/sbin/$(basename "$f")"
+done
+
+# Startx vom Konsolen-Login erlauben
+mkdir -p /etc/X11
+cat > /etc/X11/Xwrapper.config <<'XW'
+allowed_users=console
+needs_root_rights=auto
+XW
+
+update-alternatives --set x-terminal-emulator /usr/bin/xterm 2>/dev/null || true
+
+# UTF-8-Locales vorab erzeugen (spart Zeit beim Booten; live-config setzt per
+# Bootparameter locales=... die aktive). Ohne UTF-8 zeigen htop/btop nur ASCII.
+HPE_LIVE_LOCALE=de_DE.UTF-8
+[ -r /live-build/config/hpe-live.conf ] && . /live-build/config/hpe-live.conf
+sed -i -E "s/^# *(de_DE\.UTF-8|en_US\.UTF-8|${HPE_LIVE_LOCALE%.*}\.UTF-8) UTF-8/\1 UTF-8/" /etc/locale.gen
+locale-gen
+update-locale "LANG=${HPE_LIVE_LOCALE}"
+
+# iLO-Konsole hat nur 1024x768: htop/btop (auch aus Hardwaretest mit fester
+# Geometrie gestartet) maximiert öffnen, sonst ragt das Fenster unten heraus.
+if [ -f /etc/xdg/openbox/rc.xml ] && ! grep -q 'title="btop"' /etc/xdg/openbox/rc.xml; then
+    sed -i 's|</applications>|  <application class="XTerm" title="btop"><maximized>yes</maximized></application>\n  <application class="XTerm" title="htop"><maximized>yes</maximized></application>\n</applications>|' \
+        /etc/xdg/openbox/rc.xml
+fi
+
+# Icon-Cache für Taskleisten-Icons
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+
+# sbin auch im Standard-PATH normaler Benutzer (su, login, systemd-Sessions)
+sed -i 's|^ENV_PATH.*|ENV_PATH\tPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games|' /etc/login.defs

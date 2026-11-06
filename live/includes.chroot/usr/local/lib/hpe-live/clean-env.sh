@@ -1,0 +1,12 @@
+# Wird von Wrappern gesourct, die aus Hardwaretest (PyInstaller-Bundle) gestartet werden:
+# dessen Bibliothekspfade und Qt/GTK-Variablen dürfen nicht an Systemprogramme durchgereicht werden.
+if [ -n "${LD_LIBRARY_PATH_ORIG:-}" ]; then
+    LD_LIBRARY_PATH="$LD_LIBRARY_PATH_ORIG"; export LD_LIBRARY_PATH
+else
+    unset LD_LIBRARY_PATH
+fi
+unset LD_LIBRARY_PATH_ORIG LD_PRELOAD QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML2_IMPORT_PATH \
+    GDK_PIXBUF_MODULE_FILE GDK_PIXBUF_MODULEDIR GIO_MODULE_DIR GTK_PATH GTK_DATA_PREFIX GTK_EXE_PREFIX \
+    GI_TYPELIB_PATH FONTCONFIG_FILE FONTCONFIG_PATH SSL_CERT_FILE SSL_CERT_DIR PYTHONHOME PYTHONPATH
+# WebKitGTK unter iLO-/VM-Grafik (kein DMA-BUF, kein Compositing)
+export WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1

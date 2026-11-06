@@ -1,0 +1,4 @@
+#!/bin/sh
+# Bricht den Build ab, wenn Apps, Tools oder Kernelmodule fehlen.
+set -eu
+/usr/local/sbin/hpe-live-check --build

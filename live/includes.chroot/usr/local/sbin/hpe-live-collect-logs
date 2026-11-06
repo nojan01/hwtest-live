@@ -1,0 +1,33 @@
+#!/bin/sh
+# Sammelt System-Logs und Hardware-Infos als Archiv in ~user/Downloads.
+set -u
+DEST_HOME=$(getent passwd "${SUDO_USER:-user}" | cut -d: -f6); DEST_HOME=${DEST_HOME:-/home/user}
+HOST=$(hostname); SN=$(cat /sys/class/dmi/id/product_serial 2>/dev/null | tr -cd 'A-Za-z0-9_-')
+NAME="logs-${SN:-$HOST}-$(date +%Y%m%d-%H%M%S)"
+TMP=$(mktemp -d); D="$TMP/$NAME"; mkdir -p "$D"
+run() { f=$1; shift; timeout 120 "$@" >"$D/$f" 2>&1 || true; }
+echo "Sammle Logs nach $DEST_HOME/Downloads/$NAME.tar.gz ..."
+run journal.txt        journalctl -b --no-pager
+run journal-kernel.txt journalctl -k -b --no-pager
+run dmesg.txt          dmesg -T
+run hpe-live-check.txt /usr/local/sbin/hpe-live-check
+cp /run/hpe-live-check.txt "$D/hpe-live-check-boot.txt" 2>/dev/null || true
+cp /etc/hpe-live-release "$D/" 2>/dev/null || true
+command -v ras-mc-ctl >/dev/null && { run ras-summary.txt ras-mc-ctl --summary; run ras-errors.txt ras-mc-ctl --errors; }
+command -v edac-util  >/dev/null && run edac.txt edac-util -v
+run dmidecode.txt      dmidecode
+run lspci.txt          lspci -nnvv
+run lsblk.txt          lsblk -o NAME,SIZE,TYPE,MODEL,SERIAL,TRAN,FSTYPE,MOUNTPOINTS
+run lshw.txt           lshw -sanitize
+run ip.txt             ip addr
+command -v sensors >/dev/null && run sensors.txt sensors
+command -v nvme    >/dev/null && run nvme-list.txt nvme list
+command -v ssacli  >/dev/null && run ssacli.txt ssacli ctrl all show config detail
+command -v storcli64 >/dev/null && run storcli.txt storcli64 /call show all
+command -v ipmitool >/dev/null && [ -e /dev/ipmi0 ] && run ipmi-sel.txt ipmitool sel elist
+command -v nvidia-smi >/dev/null && run nvidia-smi.txt nvidia-smi -q
+mkdir -p "$DEST_HOME/Downloads"
+tar -C "$TMP" -czf "$DEST_HOME/Downloads/$NAME.tar.gz" "$NAME"
+chown -R "$(stat -c %U:%G "$DEST_HOME")" "$DEST_HOME/Downloads"
+rm -rf "$TMP"
+echo "Fertig: $DEST_HOME/Downloads/$NAME.tar.gz"

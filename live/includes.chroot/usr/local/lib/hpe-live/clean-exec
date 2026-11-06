@@ -1,0 +1,16 @@
+#!/bin/sh
+# Wrapper für Systemprogramme, die mit den Bibliotheken des Hardwaretest-Bundles
+# (LD_LIBRARY_PATH=/opt/hardwaretest/_internal) nicht laufen, z.B. journalctl,
+# systemctl, fio (OPENSSL_3.x / MOUNT_2_41 not found). Wird per Symlink
+# /usr/local/{bin,sbin}/<name> aufgerufen und startet /usr/{bin,sbin}/<name>.
+. /usr/local/lib/hpe-live/clean-env.sh
+name=${0##*/}
+case "$0" in
+    */sbin/*) dirs="/usr/sbin /usr/bin" ;;
+    *)        dirs="/usr/bin /usr/sbin" ;;
+esac
+for d in $dirs; do
+    [ -x "$d/$name" ] && exec "$d/$name" "$@"
+done
+echo "$name: nicht gefunden" >&2
+exit 127

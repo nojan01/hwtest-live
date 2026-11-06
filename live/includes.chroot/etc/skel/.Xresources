@@ -1,0 +1,27 @@
+XTerm*faceName: DejaVu Sans Mono
+XTerm*faceSize: 11
+XTerm*background: black
+XTerm*foreground: grey90
+XTerm*saveLines: 10000
+XTerm*selectToClipboard: true
+XTerm*locale: true
+XTerm*utf8: 1
+! 256 Farben für htop/btop
+XTerm*termName: xterm-256color
+! Gut lesbare Palette (Standard-Blau ist auf Schwarz über die iLO kaum erkennbar)
+XTerm*color0: #000000
+XTerm*color1: #cd3131
+XTerm*color2: #0dbc79
+XTerm*color3: #e5e510
+XTerm*color4: #3b8eea
+XTerm*color5: #bc3fbc
+XTerm*color6: #11a8cd
+XTerm*color7: #e5e5e5
+XTerm*color8: #666666
+XTerm*color9: #f14c4c
+XTerm*color10: #23d18b
+XTerm*color11: #f5f543
+XTerm*color12: #3b8eea
+XTerm*color13: #d670d6
+XTerm*color14: #29b8db
+XTerm*color15: #ffffff

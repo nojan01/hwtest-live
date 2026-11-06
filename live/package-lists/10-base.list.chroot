@@ -1,0 +1,30 @@
+# --- Basissystem -----------------------------------------------------------
+ca-certificates
+sudo
+zip
+unzip
+less
+nano
+bash-completion
+curl
+kmod
+locales
+keyboard-configuration
+console-setup
+
+# Netzwerk: NetworkManager (DHCP auf allen Ethernet-Ports automatisch,
+# schreibt /etc/resolv.conf; nmcli/nmtui für die Konsole)
+network-manager
+iproute2
+iputils-ping
+ethtool
+# mstlink: Mellanox/NVIDIA-Link-Diagnose (frei), genutzt von Hardwaretest
+mstflint
+openssh-server
+systemd-timesyncd
+
+# Rechteverwaltung für Hardwaretest (pkexec) und Live-User
+pkexec
+polkitd
+dbus-user-session
+user-setup

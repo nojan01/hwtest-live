@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Hardwaretest Live">
+    <item label="Hardwaretest"><action name="Execute"><command>hardwaretest</command></action></item>
+    <item label="Dateimanager"><action name="Execute"><command>pcmanfm</command></action></item>
+    <item label="JSON Viewer"><action name="Execute"><command>hpe-live-json-viewer</command></action></item>
+    <separator />
+    <item label="Terminal"><action name="Execute"><command>x-terminal-emulator</command></action></item>
+    <item label="Root-Terminal"><action name="Execute"><command>x-terminal-emulator -T Root-Terminal -e sudo -i</command></action></item>
+    <item label="SSH-Server starten (scp/WinSCP)"><action name="Execute"><command>x-terminal-emulator -T SSH -hold -e sudo hpe-live-ssh start</command></action></item>
+    <item label="Logs sammeln (nach ~/Downloads)"><action name="Execute"><command>x-terminal-emulator -T Logs -hold -e sudo hpe-live-collect-logs</command></action></item>
+    <item label="Berichte als Zip packen (~/Downloads)"><action name="Execute"><command>x-terminal-emulator -T Berichte -hold -e hwtest-pack-reports</command></action></item>
+    <item label="HPE-/RAID-Rohdaten sammeln (nach ~/Downloads)"><action name="Execute"><command>x-terminal-emulator -T Samples -hold -e sh -c "cd ~/Downloads &amp;&amp; sudo hpe-live-collect-samples"</command></action></item>
+    <item label="Netzwerk-Verbindungen"><action name="Execute"><command>nm-connection-editor</command></action></item>
+    <item label="htop"><action name="Execute"><command>x-terminal-emulator -T htop -e htop</command></action></item>
+    <item label="btop"><action name="Execute"><command>x-terminal-emulator -T btop -e btop</command></action></item>
+    <item label="HPE Smart Storage (ssacli)"><action name="Execute"><command>x-terminal-emulator -T ssacli -e sudo ssacli</command></action></item>
+    <item label="Systemcheck (hpe-live-check)"><action name="Execute"><command>x-terminal-emulator -T hpe-live-check -hold -e sudo hpe-live-check</command></action></item>
+    <separator />
+    <item label="Tastatur zurücksetzen (Caps Lock hängt)"><action name="Execute"><command>hpe-live-keyboard-reset</command></action></item>
+    <item label="Openbox neu laden"><action name="Reconfigure" /></item>
+    <item label="Neustart"><action name="Execute"><command>systemctl reboot</command></action></item>
+    <item label="Ausschalten"><action name="Execute"><command>systemctl poweroff</command></action></item>
+  </menu>
+</openbox_menu>

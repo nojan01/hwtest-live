@@ -1,0 +1,5 @@
+#!/bin/sh
+# Update-Prüfung von Hardwaretest im Live-System abschalten (auch für pam_env).
+set -e
+grep -q '^HARDWARETEST_NO_UPDATE_CHECK=' /etc/environment 2>/dev/null \
+    || echo 'HARDWARETEST_NO_UPDATE_CHECK=1' >> /etc/environment

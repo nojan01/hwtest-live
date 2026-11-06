@@ -1,0 +1,41 @@
+#!/bin/sh
+# Hardwaretest (PyInstaller) vererbt LD_LIBRARY_PATH=/opt/hardwaretest/_internal an
+# Kindprozesse. Dessen Ubuntu-24.04-Bibliotheken (libcrypto, libmount, ...) sind älter
+# als die von Debian 13, daher brechen z.B. journalctl (Kernel-/MCE-Log), systemctl
+# oder fio ab. Für jedes betroffene Programm einen Wrapper mit bereinigter Umgebung
+# vor /usr/bin bzw. /usr/sbin in den PATH legen.
+set -e
+
+BUNDLE=/opt/hardwaretest/_internal
+WRAP=/usr/local/lib/hpe-live/clean-exec
+[ -d "$BUNDLE" ] || { echo "hpe-live: $BUNDLE fehlt, keine Wrapper"; exit 0; }
+chmod 0755 "$WRAP"
+
+LDSO=$(ls /lib64/ld-linux-x86-64.so.2 /usr/lib64/ld-linux-x86-64.so.2 2>/dev/null | head -n1)
+LIBPATH="$BUNDLE:/usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu/systemd"
+
+link() { # $1 = /usr/bin/<name> oder /usr/sbin/<name>
+    name=${1##*/}
+    case "$1" in /usr/sbin/*) dst=/usr/local/sbin ;; *) dst=/usr/local/bin ;; esac
+    [ -e "$dst/$name" ] && return 0
+    mkdir -p "$dst"
+    ln -s "$WRAP" "$dst/$name"
+    echo "$name"
+}
+
+count=0
+for f in /usr/bin/* /usr/sbin/*; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    head -c4 "$f" 2>/dev/null | grep -q ELF || continue
+    if "$LDSO" --library-path "$LIBPATH" --list "$f" 2>&1 | grep -q "not found"; then
+        link "$f" >/dev/null && count=$((count + 1))
+    fi
+done
+
+# Terminals immer kapseln: alles, was Hardwaretest darin startet (journalctl -kf,
+# btop, Shell), läuft dann mit sauberer Umgebung.
+for t in /usr/bin/xterm /usr/bin/x-terminal-emulator; do
+    [ -e "$t" ] && link "$t" >/dev/null && count=$((count + 1))
+done
+
+echo "hpe-live: $count Wrapper gegen Hardwaretest-Bibliotheken angelegt"

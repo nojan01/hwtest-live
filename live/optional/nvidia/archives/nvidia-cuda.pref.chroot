@@ -1,0 +1,14 @@
+# NVIDIA CUDA-Repo: nur den Treiber in genau der gewählten Version
+# (@NVIDIA_VERSION@, vom Build-Skript ersetzt) und DCGM verwenden.
+# Alles andere aus dem Repo wird ignoriert.
+Package: *
+Pin: origin developer.download.nvidia.com
+Pin-Priority: -1
+
+Package: nvidia-* libnvidia-* libnv* libcuda* firmware-nvidia-*
+Pin: version @NVIDIA_VERSION@-*
+Pin-Priority: 1001
+
+Package: datacenter-gpu-manager-4-* dcgmi libdcgm nv-hostengine
+Pin: origin developer.download.nvidia.com
+Pin-Priority: 600

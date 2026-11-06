@@ -1,0 +1,66 @@
+#!/bin/sh
+# Baut die DKMS-Module (ZFS, optional NVIDIA) für den Live-Kernel, sichert sie
+# und entfernt anschließend Compiler, Header und DKMS wieder aus dem Image.
+set -eu
+
+KVER=$(ls /lib/modules | sort -V | tail -n1)
+echo "hpe-live: Live-Kernel ist ${KVER}"
+
+if ! command -v dkms >/dev/null 2>&1; then
+    echo "hpe-live: dkms nicht installiert - nichts zu tun"
+    exit 0
+fi
+
+dkms autoinstall -k "${KVER}"
+dkms status
+
+# Prüfen, ob alle registrierten DKMS-Module für den Live-Kernel gebaut wurden
+if dkms status -k "${KVER}" | grep -v ': installed' | grep -q .; then
+    echo "hpe-live: FEHLER - nicht alle DKMS-Module installiert:" >&2
+    dkms status -k "${KVER}" >&2
+    exit 1
+fi
+modinfo -k "${KVER}" zfs >/dev/null
+
+# Gebaute Module sichern (dkms remove beim Purge löscht sie sonst)
+rm -rf /root/hpe-live-dkms
+mkdir -p /root/hpe-live-dkms
+cp -a "/lib/modules/${KVER}/updates" /root/hpe-live-dkms/
+
+# Laufzeitpakete, die nur durch *-dkms hereingekommen sind, behalten
+KEEP=$(dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' \
+    | awk '$1 ~ /^ii/ {print $2}' \
+    | grep -E '^(nvidia-|libnvidia-|firmware-nvidia-|glx-|update-glx|libcuda)' \
+    | grep -v -- '-dkms$' || true)
+if [ -n "${KEEP}" ]; then
+    # shellcheck disable=SC2086
+    apt-mark manual ${KEEP} >/dev/null
+fi
+
+# cpp NICHT entfernen: x11-xserver-utils (xrdb, xsetroot, xset, xrandr)
+# hängt davon ab und würde sonst per --auto-remove mit gelöscht.
+if dpkg-query -W -f='${db:Status-Abbrev}' x11-xserver-utils 2>/dev/null | grep -q '^ii'; then
+    apt-mark manual x11-xserver-utils >/dev/null
+fi
+
+PURGE=$(dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' \
+    | awk '$1 ~ /^ii/ {print $2}' \
+    | grep -E '^(dkms|.*-dkms|linux-headers-.*|linux-kbuild-.*|linux-compiler-.*|gcc|gcc-[0-9]+|g\+\+|g\+\+-[0-9]+|make|libc6-dev|libc-dev-bin|linux-libc-dev|libgcc-[0-9]+-dev|libstdc\+\+-[0-9]+-dev|libcrypt-dev|rpcsvc-proto|libtirpc-dev|libnsl-dev|patch|dpkg-dev|build-essential)$' || true)
+echo "hpe-live: entferne Build-Werkzeuge: ${PURGE}"
+# shellcheck disable=SC2086
+DEBIAN_FRONTEND=noninteractive apt-get purge -y --auto-remove ${PURGE}
+
+# Module wiederherstellen
+mkdir -p "/lib/modules/${KVER}"
+rm -rf "/lib/modules/${KVER}/updates"
+cp -a /root/hpe-live-dkms/updates "/lib/modules/${KVER}/"
+rm -rf /root/hpe-live-dkms /var/lib/dkms
+depmod -a "${KVER}"
+modinfo -k "${KVER}" zfs >/dev/null
+echo "hpe-live: DKMS-Module wiederhergestellt:"
+find "/lib/modules/${KVER}/updates" -name '*.ko*' -printf '  %f\n'
+
+# X-Werkzeuge dürfen beim Aufräumen nicht verloren gehen
+for b in xrdb xsetroot; do
+    command -v "$b" >/dev/null || { echo "hpe-live: FEHLER - $b fehlt nach dem Aufräumen" >&2; exit 1; }
+done

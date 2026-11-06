@@ -1,0 +1,40 @@
+#!/bin/sh
+# Packt die NVIDIA-/CUDA-/DCGM-Dateien (Liste aus dem Chroot-Hook
+# 0800-hpe-live-nvidia-layer) als zweites Squashfs nach live/nvidia.squashfs.
+# live-boot hängt ohne weitere Parameter alle *.squashfs in /live als Overlay
+# ein (nvidia über der Basis); mit „toram=filesystem.squashfs“ (Bootmenü
+# „ohne NVIDIA-Treiber“) wird nur die Basis kopiert und eingehängt.
+# Arbeitsverzeichnis von live-build: binary/
+set -eu
+
+LIST=../chroot/var/lib/hpe-live/nvidia-layer/files
+if [ ! -s "$LIST" ]; then
+    echo "hpe-live: keine NVIDIA-Dateiliste - kein nvidia.squashfs"
+    exit 0
+fi
+[ -f live/filesystem.squashfs ] || { echo "hpe-live: FEHLER - live/filesystem.squashfs fehlt" >&2; exit 1; }
+# live-build setzt das Exclude-File aus dieser Liste nur, wenn das Build-Skript es
+# vor „lb binary“ erzeugt hat; ohne Ausschluss wäre nvidia.squashfs doppelt.
+if [ ! -s ../config/rootfs/excludes ]; then
+    echo "hpe-live: FEHLER - config/rootfs/excludes fehlt, Basis enthält die NVIDIA-Dateien noch" >&2
+    exit 1
+fi
+
+STAGE=../nvidia-layer.stage
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
+# Pfade in der Liste sind absolut -> relativ zum Quellverzeichnis ../chroot/
+rsync -aH --files-from="$LIST" ../chroot/ "$STAGE/"
+
+rm -f live/nvidia.squashfs
+nice -n 17 mksquashfs "$STAGE" live/nvidia.squashfs -comp xz -noappend -no-progress
+rm -rf "$STAGE"
+
+# Kontrolle: die Basis darf nvidia-smi nicht mehr enthalten, die Schicht muss es haben
+if unsquashfs -ls live/filesystem.squashfs usr/bin/nvidia-smi 2>/dev/null | grep -q 'nvidia-smi'; then
+    echo "hpe-live: FEHLER - filesystem.squashfs enthält noch usr/bin/nvidia-smi" >&2
+    exit 1
+fi
+unsquashfs -ls live/nvidia.squashfs usr/bin/nvidia-smi 2>/dev/null | grep -q 'nvidia-smi' \
+    || { echo "hpe-live: FEHLER - nvidia.squashfs enthält kein usr/bin/nvidia-smi" >&2; exit 1; }
+echo "hpe-live: Squashfs-Schichten: $(du -m live/filesystem.squashfs | cut -f1) MB Basis + $(du -m live/nvidia.squashfs | cut -f1) MB NVIDIA"

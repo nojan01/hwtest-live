@@ -1,0 +1,5 @@
+# RAPL-Energiezähler für alle lesbar machen, damit Hardwaretest (läuft als "user")
+# die Leistung der integrierten Intel-GPU (Zone "uncore") und der CPU anzeigen kann.
+# Seit CVE-2020-8694 (PLATYPUS) sind sie standardmäßig nur für root lesbar; auf diesem
+# reinen Testsystem ohne fremde Benutzer ist die Freigabe vertretbar.
+ACTION=="add", SUBSYSTEM=="powercap", TEST=="energy_uj", RUN+="/bin/chmod 0444 /sys%p/energy_uj"

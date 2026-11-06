@@ -1,0 +1,13 @@
+[Unit]
+Description=HPE Live: Swap im RAM (zram)
+DefaultDependencies=no
+After=systemd-modules-load.service local-fs.target
+Before=swap.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/hpe-live-zram
+
+[Install]
+WantedBy=swap.target

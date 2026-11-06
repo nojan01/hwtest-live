@@ -1,0 +1,8 @@
+#!/bin/sh
+# hponcfg sucht OpenSSL per "which openssl" und prüft die Datei mit "strings".
+# /usr/local/bin/openssl ist ein clean-exec-Wrapper (Skript) -> "Unable to locate
+# SSL library". Daher mit PATH ohne /usr/local und ohne geerbtes LD_LIBRARY_PATH starten.
+unset LD_LIBRARY_PATH
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+exec /usr/sbin/hponcfg "$@"

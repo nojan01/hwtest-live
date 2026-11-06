@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Hardwaretest
+Exec=hardwaretest
+Icon=hardwaretest
+Terminal=false
+Categories=System;

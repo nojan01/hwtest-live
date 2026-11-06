@@ -1,0 +1,20 @@
+#!/bin/sh
+# Packt alle Berichte aus ~/Downloads (Hardwaretest-HTML/JSON/TXT, Log-Archive) in ein Zip-Archiv.
+# Vorhandene Zip-Archive werden nicht erneut eingepackt.
+set -u
+DL="$HOME/Downloads"
+SN=$(cat /sys/class/dmi/id/product_serial 2>/dev/null | tr -cd 'A-Za-z0-9_-')
+NAME="berichte-${SN:-$(hostname)}-$(date +%Y%m%d-%H%M%S).zip"
+cd "$DL" 2>/dev/null || { echo "Kein Verzeichnis $DL."; exit 1; }
+FILES=$(find . -maxdepth 1 -type f ! -name '*.zip' ! -name '.*' -printf '%P\n' | sort)
+if [ -z "$FILES" ]; then
+    echo "Keine Berichte in $DL gefunden."
+    exit 1
+fi
+echo "Packe $(printf '%s\n' "$FILES" | wc -l) Datei(en) aus $DL nach $NAME ..."
+printf '%s\n' "$FILES" | zip -q "$NAME" -@ || { echo "Fehler beim Erstellen des Archivs."; exit 1; }
+echo
+unzip -l "$NAME"
+echo
+echo "Fertig: $DL/$NAME"
+echo "Abholen: scp user@<IP>:Downloads/$NAME .  (oder WinSCP, Passwort live)"

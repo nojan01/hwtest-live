@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=JSON Viewer
+Exec=hpe-live-json-viewer
+Icon=app
+Terminal=false
+Categories=System;

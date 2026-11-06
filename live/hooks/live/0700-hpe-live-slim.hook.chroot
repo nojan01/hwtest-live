@@ -1,0 +1,49 @@
+#!/bin/sh
+# Verkleinert das Image: nicht benötigte Kernelmodule und Caches entfernen.
+set -eu
+
+STRIP_KERNEL_MODULES=1
+[ -r /live-build/config/hpe-live.conf ] && . /live-build/config/hpe-live.conf
+
+KVER=$(ls /lib/modules | sort -V | tail -n1)
+M="/lib/modules/${KVER}/kernel"
+
+if [ "${STRIP_KERNEL_MODULES}" = "1" ] && [ -d "$M" ]; then
+    before=$(du -sm "$M" | cut -f1)
+    for d in \
+        sound \
+        drivers/media \
+        drivers/staging \
+        drivers/net/wireless \
+        drivers/bluetooth \
+        drivers/isdn \
+        drivers/iio \
+        drivers/input/joystick \
+        drivers/input/touchscreen \
+        drivers/input/tablet \
+        net/wireless \
+        net/mac80211 \
+        net/bluetooth
+    do
+        rm -rf "${M:?}/${d}"
+    done
+    # Grafiktreiber (amdgpu, radeon, i915, xe, nouveau) bleiben; nouveau ist mit
+    # proprietärem NVIDIA-Treiber per Kernel-Parameter gesperrt (Bootmenü-Notlösung).
+    depmod -a "${KVER}"
+    echo "hpe-live: Kernelmodule ${before} MB -> $(du -sm "$M" | cut -f1) MB"
+fi
+
+# Firmware ohne Bezug zu Test-PCs/Servern (z.B. aus firmware-misc-nonfree);
+# Grafik-Firmware (amdgpu, radeon, i915, xe, nvidia) bleibt erhalten.
+rm -rf /lib/firmware/ath* /lib/firmware/iwlwifi* /lib/firmware/brcm \
+    /lib/firmware/mediatek /lib/firmware/rtw88 /lib/firmware/rtw89 /lib/firmware/mrvl/prestera 2>/dev/null || true
+
+# Vulkan-Treiber ohne Bezug zu PC-/Server-Hardware (Apple, Android-Emulator, virtio)
+rm -f /usr/share/vulkan/icd.d/asahi_icd.* /usr/share/vulkan/icd.d/gfxstream_vk_icd.* \
+    /usr/share/vulkan/icd.d/virtio_icd.* /usr/lib/x86_64-linux-gnu/libvulkan_asahi.so \
+    /usr/lib/x86_64-linux-gnu/libvulkan_gfxstream.so /usr/lib/x86_64-linux-gnu/libvulkan_virtio.so
+
+rm -rf /usr/share/doc-base /var/cache/apt/*.bin /var/cache/debconf/*-old \
+    /var/lib/apt/lists/* /var/log/apt/* 2>/dev/null || true
+find /usr/share/doc -mindepth 1 -not -name copyright -not -type d -delete 2>/dev/null || true
+find /usr/share/doc -mindepth 1 -type d -empty -delete 2>/dev/null || true

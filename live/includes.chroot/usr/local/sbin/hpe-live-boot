@@ -1,0 +1,11 @@
+#!/bin/sh
+# Einmalig beim Booten: optionale Dienste starten und Systemcheck protokollieren.
+if grep -qw 'hpe-live.ssh' /proc/cmdline; then
+    /usr/local/sbin/hpe-live-ssh start >/dev/null 2>&1 || true
+fi
+/usr/local/sbin/hpe-live-check >/run/hpe-live-check.txt 2>&1
+rc=$?
+summary=$(tail -n1 /run/hpe-live-check.txt)
+# Marker für Serial-Konsole / automatisierte QEMU-Tests
+echo "<1>hpe-live: READY rc=$rc $summary" >/dev/kmsg
+exit 0

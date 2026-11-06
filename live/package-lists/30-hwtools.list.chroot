@@ -1,0 +1,45 @@
+# --- Hardware-Test-/Diagnosewerkzeuge ---------------------------------------
+btop
+htop
+stress-ng
+fio
+iperf3
+nvme-cli
+libnvme1t64
+smartmontools
+memtest86+
+hdparm
+sg3-utils
+mdadm
+lvm2
+util-linux
+e2fsprogs
+lshw
+pciutils
+usbutils
+dmidecode
+lm-sensors
+edac-utils
+fastfetch
+rasdaemon
+ipmitool
+jq
+
+# ZFS (Kernelmodul wird per DKMS beim Build gebaut, Toolchain danach entfernt)
+zfsutils-linux
+zfs-dkms
+linux-headers-amd64
+# Dateisystemprüfung in Hardwaretest (xfs, btrfs, vfat, squashfs) – nur lesend
+xfsprogs
+btrfs-progs
+dosfstools
+squashfs-tools
+# Reparaturwerkzeuge für den Administrator (Hardwaretest selbst repariert nicht):
+# e2fsck/xfs_repair/btrfs/fsck.fat (oben), ntfsfix, fsck.exfat, gdisk, testdisk/photorec
+ntfs-3g
+exfatprogs
+gdisk
+testdisk
+# VMware-ESXi-Datenspeicher lesend prüfen (fsck.vmfs6 / fsck.vmfs, Hardwaretest Dateisystem-Tab)
+vmfs6-tools
+vmfs-tools

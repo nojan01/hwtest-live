@@ -1,0 +1,4 @@
+# --- NVIDIA Data Center GPU Manager (dcgmi diag) -----------------------------
+# Treiber >= 580 unterstützt CUDA 13 -> cuda13-Variante von DCGM 4.
+datacenter-gpu-manager-4-cuda13
+libcuda1

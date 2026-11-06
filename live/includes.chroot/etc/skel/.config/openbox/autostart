@@ -1,0 +1,7 @@
+# Hardwaretest Live – Openbox Autostart
+xsetroot -solid '#1f2a36'
+feh --no-fehbg --bg-max --image-bg '#1f2a36' /usr/share/backgrounds/hpe-live/testsystem.png &
+lxpolkit &
+tint2 &
+nm-applet &
+/usr/local/bin/hpe-live-autostart &
