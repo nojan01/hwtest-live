@@ -23,7 +23,25 @@ check_file() {
     if [ -e "$1" ]; then ok "$1"; else bad "Datei $1"; fi
 }
 check_mod() {
-    if modinfo -k "$KVER" "$1" >/dev/null 2>&1; then ok "Kernelmodul $1"; else bad "Kernelmodul $1 (Kernel $KVER)"; fi
+    top=$1
+    if ! modinfo -k "$KVER" "$top" >/dev/null 2>&1; then bad "Kernelmodul $top (Kernel $KVER)"; return; fi
+    # Alle Abhängigkeiten (rekursiv über modinfo "depends", nicht über modules.dep –
+    # dort fehlen gelöschte Module stillschweigend) müssen vorhanden sein,
+    # sonst "Unknown symbol" beim Laden.
+    queue=$(modinfo -k "$KVER" -F depends "$top" 2>/dev/null | tr ',' ' ')
+    seen=" "
+    while [ -n "$queue" ]; do
+        set -- $queue
+        [ $# -gt 0 ] || break
+        mod=$1; shift; queue="$*"
+        case "$seen" in *" $mod "*) continue;; esac
+        seen="$seen$mod "
+        if ! modinfo -k "$KVER" "$mod" >/dev/null 2>&1; then
+            bad "Kernelmodul $top: Abhängigkeit $mod fehlt"; return
+        fi
+        queue="$queue $(modinfo -k "$KVER" -F depends "$mod" 2>/dev/null | tr ',' ' ')"
+    done
+    ok "Kernelmodul $top"
 }
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

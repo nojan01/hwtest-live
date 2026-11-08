@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut das Hardwaretest-Live-ISO (Debian 13 "trixie", amd64, hybrid BIOS/UEFI) mit live-build.
+# Baut das Hardwaretest-Live-ISO (Repo HPE-Live-ISO) (Debian 13 "trixie", amd64, hybrid BIOS/UEFI) mit live-build.
 #
 #   sudo ./scripts/build_live_iso.sh [Optionen]
 #
@@ -116,7 +116,7 @@ esac
 
 [ "$(id -u)" -eq 0 ] || die "live-build braucht root-Rechte: sudo $0 ..."
 
-need=(lb debootstrap curl python3 dpkg-deb)
+need=(lb debootstrap curl python3 dpkg-deb xorriso)
 case "$MEMTEST86" in
     none|"") MEMTEST86=none ;;
     *) [ -e "$MEMTEST86" ] || die "--memtest86: $MEMTEST86 nicht gefunden"
@@ -135,8 +135,10 @@ case "$VENDOR_TOOLS" in
 esac
 [ "$NVIDIA" = "none" ] || need+=(rsync mksquashfs unsquashfs)
 for c in "${need[@]}"; do
-    command -v "$c" >/dev/null 2>&1 || die "'$c' fehlt. Installieren: apt install live-build debootstrap curl python3 libarchive-tools mtools fdisk rsync squashfs-tools"
+    command -v "$c" >/dev/null 2>&1 || die "'$c' fehlt. Installieren: apt install live-build debootstrap curl python3 xorriso isolinux libarchive-tools mtools fdisk rsync squashfs-tools"
 done
+ISOHDPFX=/usr/lib/ISOLINUX/isohdpfx.bin
+[ -f "$ISOHDPFX" ] || die "$ISOHDPFX fehlt. Installieren: apt install isolinux"
 
 mkdir -p "$BUILD_ROOT"
 BUILD_ROOT="$(readlink -f "$BUILD_ROOT")"
@@ -167,8 +169,15 @@ gh_api() {
 
 # fetch_latest_asset REPO REGEX -> Pfad der heruntergeladenen Datei
 fetch_latest_asset() {
-    local repo="$1" regex="$2" meta url name
-    meta="$(gh_api "repos/$repo/releases/latest")" || die "GitHub-API für $repo nicht erreichbar"
+    local repo="$1" regex="$2" meta url name cached
+    if ! meta="$(gh_api "repos/$repo/releases/latest")"; then
+        # GitHub-Störung (5xx): zuletzt geladenes Artefakt weiterverwenden
+        cached="$(ls -t "$ARTIFACTS" 2>/dev/null | grep -E "$regex" | head -n1 || true)"
+        [ -n "$cached" ] || die "GitHub-API für $repo nicht erreichbar (kein lokales Artefakt)"
+        echo "  WARNUNG: GitHub-API für $repo nicht erreichbar - verwende lokal $cached" >&2
+        printf '%s\n' "$ARTIFACTS/$cached"
+        return
+    fi
     read -r name url < <(printf '%s' "$meta" | python3 -c '
 import json, re, sys
 rx = re.compile(sys.argv[1])
@@ -261,7 +270,7 @@ EOF
 
 log "Hole App-Artefakte"
 HT_DEB="$(resolve_deb "$HARDWARETEST" "$HARDWARETEST_REPO" '^hardwaretest_.*_amd64\.deb$')"
-JV_DEB="$(resolve_deb "$JSON_VIEWER" "$JSON_VIEWER_REPO" '_amd64\.deb$')"
+JV_DEB="$(resolve_deb "$JSON_VIEWER" "$JSON_VIEWER_REPO" '^[Jj][Ss][Oo][Nn].*_amd64\.deb$')"
 ILO_DEB=""
 case "$ILOREST" in
     none) ;;
@@ -591,6 +600,27 @@ rc=${PIPESTATUS[0]}
 set -e
 ISO_SRC="$(ls -1 "$BUILD_DIR"/*.hybrid.iso 2>/dev/null | head -n1 || true)"
 [ "$rc" -eq 0 ] && [ -n "$ISO_SRC" ] || die "lb build fehlgeschlagen (rc=$rc), siehe $BUILD_DIR/build.log"
+
+# ------------------------------------------------- GPT-Layout (Ubuntu-Stil) ----
+# live-build erzeugt ein klassisches isohybrid: MBR-Partition Typ 0x00 ab Sektor 0 mit
+# darin verschachtelter EFI-Partition. Manche UEFI-Firmware (z.B. Lenovo 339C) zeigt
+# so einen USB-Stick gar nicht erst im Bootmenü. Daher wird der binary-Baum mit xorriso
+# neu gepackt wie Ubuntu ≥ 20.10: Schutz-MBR (0xEE) + GPT, Partition 1 = ISO9660
+# (ab Sektor 64, mountbar), Partition 2 = eigenständige EFI-Systempartition.
+# BIOS-Boot über isohdpfx/isolinux bleibt erhalten; dd/Etcher/Rufus/iLO funktionieren.
+# Benötigt auf dem Host: xorriso, isolinux (isohdpfx.bin).
+if [ -f binary/boot/grub/efi.img ] && [ -f binary/isolinux/isolinux.bin ]; then
+    log "Packe ISO mit GPT-Layout neu (xorriso)"
+    xorriso -as mkisofs -quiet -R -r -J -joliet-long -l -iso-level 3 \
+        -V "HWTEST-LIVE${SUFFIX^^}" -A "Hardwaretest Live" -publisher "intern" \
+        -isohybrid-mbr "$ISOHDPFX" -partition_offset 16 --mbr-force-bootable \
+        -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table \
+        -eltorito-alt-boot -e '--interval:appended_partition_2:all::' -no-emul-boot \
+        -append_partition 2 C12A7328-F81F-11D2-BA4B-00A0C93EC93B binary/boot/grub/efi.img \
+        -appended_part_as_gpt \
+        -o "$ISO_SRC.gpt" binary || die "xorriso-Repack (GPT-Layout) fehlgeschlagen"
+    mv "$ISO_SRC.gpt" "$ISO_SRC"
+fi
 
 mv "$ISO_SRC" "$OUTPUT_DIR/$ISO_NAME"
 # live-build schreibt die Paketliste als live-image-amd64.packages (ohne ".hybrid")

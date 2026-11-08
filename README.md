@@ -1,8 +1,8 @@
 # Hardwaretest Live ISO
 
 > Live-System zum Hardwaretest von Servern (Debian 13 „trixie“, amd64). Dateiname `hwtest-live-DATUM.iso`,
-> Hostname `hwtest-live` (Prompt `user@hwtest-live`). Interne Skript- und Dienstnamen heißen aus
-> historischen Gründen `hpe-live-*`. Fertige Images: [Releases](https://github.com/nojan01/hwtest-live/releases).
+> Hostname `hwtest-live` (Prompt `user@hwtest-live`). Das Repository heißt aus historischen Gründen
+> weiterhin HPE-Live-ISO; interne Skript- und Dienstnamen (`hpe-live-*`) sind unverändert.
 
 Minimales Debian‑13‑Live‑System („trixie“, amd64) als **hybrides ISO (UEFI + Legacy‑BIOS)**.
 Es lässt sich über **iLO Virtual Media** auf HPE‑ProLiant‑Servern mounten und booten.
@@ -11,12 +11,12 @@ Das System läuft komplett im RAM (`toram`), installiert nichts auf die Server�
 * **Hardwaretest** (PySide6/Qt6, `nojan01/Ubuntu-Stresstest`) – startet automatisch
 * **JSON Viewer/Editor** (Tauri/WebKitGTK, `nojan01/json-viewer-editor`) – wird aus Hardwaretest geöffnet
 
-> **Freie Ausprägung:** Dieses Repository und die veröffentlichten Images enthalten ausschließlich
-> frei weitergebbare Komponenten – Debian‑Pakete, HPE‑Pakete aus dem öffentlichen SDR/MCP‑Repo,
-> NVIDIA‑Treiber aus dem CUDA‑Repo und das freie **memtest86+** (GPL). PassMark MemTest86 und
-> Hersteller‑Werkzeuge mit Weitergabeverbot (QLogic `qaucli`, Emulex `hbacmd`, Mellanox MFT) sind
-> **nicht** enthalten; die Build‑Optionen `--memtest86` und `--vendor-tools` erlauben es, sie für den
-> eigenen, internen Gebrauch aus selbst beschafften Dateien hinzuzufügen (ISO‑Name dann `-intern`).
+> **Zwei Ausprägungen:** Das **externe ISO** (Standard‑Build) enthält nur frei weitergebbare
+> Komponenten (HPE‑Pakete aus dem öffentlichen SDR, NVIDIA‑Treiber aus dem CUDA‑Repo) und wird
+> als Release veröffentlicht. Das **interne ISO** (`--vendor-tools DIR`, Namenszusatz `-intern`)
+> enthält zusätzlich Hersteller‑Werkzeuge für FC‑HBAs und Ethernet‑Adapter (QLogic `qaucli`,
+> Emulex `hbacmd`, Mellanox MFT) und ggf. MemTest86 Pro, deren EULA keine Weitergabe erlaubt –
+> nur für den internen Gebrauch, nicht veröffentlichen.
 > Lizenzen der Drittkomponenten: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md)
 > (im Image unter `/usr/local/share/doc/hpe-live/`).
 
@@ -40,17 +40,34 @@ und `ssa` (GUI).
 liefert er dem iLO die OS-Sicht; im Gegenzug sind in Hardwaretest → ProLiant‑Info → Sensoren deutlich mehr
 Temperatursensoren und Lüfterwerte sichtbar als ohne Agent.
 
-## USB-Stick/USB-HDD mit Persistenz
+## ISO auf USB-Stick/USB-HDD schreiben
+
+Das ISO hat ein GPT-Layout mit eigenständiger EFI-Systempartition (wie Ubuntu ≥ 20.10) und
+bootet per UEFI (Secure Boot) und BIOS. Es kann 1:1 geschrieben werden, z.B. mit
+**balenaEtcher**, **Rufus** (Windows), `dd` oder über iLO Virtual Media.
+
+### Mit Persistenz unter Windows: Rufus
+
+1. Rufus starten, Laufwerk und ISO wählen, Partitionsschema **GPT**, Zielsystem **UEFI (non CSM)**.
+2. Regler **„Persistente Partitionsgröße“** aufziehen (z.B. 16–32 GB) und **Start** klicken;
+   bei der Rückfrage **„Im ISO-Image-Modus schreiben“** belassen.
+3. Beim Booten den Eintrag **„Hardwaretest Live: mit Persistenz“** wählen.
+
+Alternativ **Ventoy**: ISO einfach auf den Ventoy-Stick kopieren (ohne Persistenz).
+
+### Mit Persistenz unter Linux: Skript
 
 ```bash
 sudo bash scripts/make-persistent-usb.sh dist/hwtest-live-YYYYMMDD.iso /dev/sdX [32G]
 ```
 
-Das Skript schreibt das ISO auf das Gerät und legt im Restplatz (oder in der angegebenen Größe) eine
-ext4-Partition mit dem Label `persistence` und `persistence.conf` = `/ union` an. Beim Booten den Eintrag
+Das Skript legt auf dem Gerät eine GPT mit BIOS-Boot-Partition, einer FAT32-EFI-Systempartition
+mit dem ISO-Inhalt (unter Windows lesbar) und einer ext4-Partition `persistence`
+(`persistence.conf` = `/ union`) im Restplatz bzw. in der angegebenen Größe an. Beim Booten den Eintrag
 **„Hardwaretest Live: mit Persistenz“** wählen: Änderungen (Reports, Einstellungen, nachinstallierte Pakete) bleiben
 erhalten. Die anderen Einträge starten weiterhin ohne Persistenz. ISO-Updates: Skript erneut ausführen
-(löscht auch die Persistenz).
+(löscht auch die Persistenz). `--dd` schreibt stattdessen das ISO-Abbild 1:1 und hängt die
+Persistenz-Partition an.
 
 ## Varianten
 
@@ -129,6 +146,15 @@ Beispiel mit lokalen App‑Paketen:
 sudo ./scripts/build_live_iso.sh \
   --hardwaretest ~/Vorlagen/Hardwaretest/hardwaretest_0.2.32_amd64.deb \
   --json-viewer ~/Downloads/JSON.Viewer_1.5.4_amd64.deb
+```
+
+Internes ISO mit Hersteller‑Werkzeugen (nicht veröffentlichen):
+
+```bash
+sudo ./scripts/build_live_iso.sh \
+  --hardwaretest ~/Vorlagen/Hardwaretest/hardwaretest_0.2.65_amd64.deb \
+  --vendor-tools ~/Downloads/vendor-tools \
+  --memtest86 ~/Downloads/memtest86-pro-usb.img
 ```
 
 Ergebnis: `dist/<name>.iso` mit `.sha256` und `.packages` (Paketliste).
@@ -259,7 +285,15 @@ Hinweise:
 | `sudo hponcfg -w ilo.xml` | iLO‑Konfiguration lokal über den CHIF‑Treiber (`hpilo`) lesen/schreiben |
 | `sudo ilorest login` (ohne Parameter = lokal) | Redfish/iLO‑Konfiguration, BIOS‑Einstellungen, Firmware‑Inventar |
 
-Herstellerwerkzeuge für FC‑HBAs (QLogic `qaucli`, Emulex `hbacmd`) und Mellanox MFT (`mlxlink`) sind nicht enthalten (nur per `--vendor-tools` für den eigenen Gebrauch). Ohne diese Werkzeuge liefert Hardwaretest (Tab System → Fibre‑Channel‑HBAs, Tab Netzwerk → ethtool) die herstellerunabhängigen Daten aus sysfs und `ethtool`. Für Mellanox/NVIDIA‑Ethernet ist das **freie** `mstflint` (`mstlink`) im Image enthalten; Hardwaretest bietet damit im Tab Netzwerk die Link‑Diagnose an.
+Nur im **internen ISO** (`--vendor-tools`):
+
+| Befehl | Zweck |
+|---|---|
+| `sudo qaucli -pr fc -g` / `-pr fc -i <hba>` | QLogic/Marvell FC‑HBAs: Übersicht, Port‑Details, Loopback‑/Diagnosetest, SFP‑Daten |
+| `sudo hbacmd ListHBAs` / `hbacmd LoopBackTest <WWPN> …` / `hbacmd GetXcvrData <WWPN>` | Emulex/Broadcom FC‑HBAs: Übersicht, Loopback‑/Echo‑Test, Transceiver |
+| `sudo mst start && sudo mlxlink -d <dev>` / `mlxcables` | Mellanox/NVIDIA Ethernet: Link‑Diagnose (BER, Eye), Kabel/Transceiver |
+
+Ohne diese Werkzeuge liefert Hardwaretest (Tab System → Fibre‑Channel‑HBAs, Tab Netzwerk → ethtool) die herstellerunabhängigen Daten aus sysfs und `ethtool`. Für Mellanox/NVIDIA‑Ethernet ist das **freie** `mstflint` (`mstlink`) in beiden ISO‑Ausprägungen enthalten; Hardwaretest bietet damit im Tab Netzwerk die Link‑Diagnose an.
 
 ## Struktur
 
@@ -281,7 +315,3 @@ scripts/
 Weitere Pakete kommen in eine neue Datei `live/package-lists/NN-name.list.chroot`.
 Zusätzliche lokale `.deb`‑Dateien können nach `live/packages.chroot/` gelegt werden
 (Dateiname muss auf `_amd64.deb` oder `_all.deb` enden).
-
-## Lizenz
-
-Build-Skripte, Hooks und Konfiguration dieses Repositories: [MIT](LICENSE). Für die im Image enthaltenen Drittkomponenten gelten die in [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) genannten Lizenzen.

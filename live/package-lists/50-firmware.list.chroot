@@ -5,3 +5,5 @@ firmware-qlogic
 firmware-netxen
 firmware-intel-misc
 firmware-misc-nonfree
+# Realtek-NICs (RTL8125/8168 in Test-PCs und Workstations)
+firmware-realtek

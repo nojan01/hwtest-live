@@ -12,7 +12,18 @@ if [ "${STRIP_KERNEL_MODULES}" = "1" ] && [ -d "$M" ]; then
     before=$(du -sm "$M" | cut -f1)
     for d in \
         sound \
-        drivers/media \
+        drivers/media/usb \
+        drivers/media/pci \
+        drivers/media/dvb-frontends \
+        drivers/media/tuners \
+        drivers/media/i2c \
+        drivers/media/radio \
+        drivers/media/platform \
+        drivers/media/test-drivers \
+        drivers/media/common \
+        drivers/media/v4l2-core \
+        drivers/media/dvb-core \
+        drivers/media/mc \
         drivers/staging \
         drivers/net/wireless \
         drivers/bluetooth \
@@ -27,9 +38,38 @@ if [ "${STRIP_KERNEL_MODULES}" = "1" ] && [ -d "$M" ]; then
     do
         rm -rf "${M:?}/${d}"
     done
+    # drivers/media/cec bleibt: drm_display_helper (i915, xe, amdgpu, radeon, nouveau)
+    # braucht cec.ko, und cec.ko braucht rc-core.ko (drivers/media/rc) – ohne beide
+    # lädt kein Grafiktreiber ("unknown symbol", X fällt auf 800x600 zurück).
+    # Aus drivers/media/rc bleibt daher nur rc-core, alle IR-Empfänger fliegen raus.
+    find "${M}/drivers/media/rc" -type f ! -name 'rc-core.ko*' -delete 2>/dev/null || true
+    find "${M}/drivers/media/rc" -mindepth 1 -type d -empty -delete 2>/dev/null || true
     # Grafiktreiber (amdgpu, radeon, i915, xe, nouveau) bleiben; nouveau ist mit
     # proprietärem NVIDIA-Treiber per Kernel-Parameter gesperrt (Bootmenü-Notlösung).
     depmod -a "${KVER}"
+    # depmod warnt nicht zuverlässig über gelöschte Abhängigkeiten – daher die
+    # "depends"-Kette der Grafiktreiber rekursiv gegen das Dateisystem prüfen.
+    missing=""
+    checked=" "
+    queue="i915 xe amdgpu radeon nouveau drm_display_helper cec"
+    while [ -n "$queue" ]; do
+        set -- $queue
+        [ $# -gt 0 ] || break
+        mod=$1; shift; queue="$*"
+        case "$checked" in *" $mod "*) continue;; esac
+        checked="$checked$mod "
+        file=$(modinfo -k "${KVER}" -n "$mod" 2>/dev/null || true)
+        if [ -z "$file" ] || [ ! -f "$file" ]; then
+            missing="$missing $mod"
+            continue
+        fi
+        deps=$(modinfo -k "${KVER}" -F depends "$mod" 2>/dev/null | tr ',' ' ')
+        queue="$queue $deps"
+    done
+    if [ -n "$missing" ]; then
+        echo "hpe-live: Kernelmodule mit fehlenden Abhängigkeiten:$missing" >&2
+        exit 1
+    fi
     echo "hpe-live: Kernelmodule ${before} MB -> $(du -sm "$M" | cut -f1) MB"
 fi
 
