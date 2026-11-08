@@ -149,7 +149,7 @@ case "$LB_VERSION" in
 esac
 
 [ "$FREE" != 1 ] || SUFFIX="${SUFFIX}-free"
-[ "$VENDOR_TOOLS" = none ] || SUFFIX="${SUFFIX}-intern"
+[ "$VENDOR_TOOLS" = none ] && [ "$MEMTEST86" = none ] || SUFFIX="${SUFFIX}-intern"
 VARIANT="trixie-amd64${SUFFIX}"
 BUILD_DIR="$BUILD_ROOT/$VARIANT"
 ARTIFACTS="$BUILD_ROOT/artifacts"
