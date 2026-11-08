@@ -1,0 +1,20 @@
+#!/bin/sh
+# Hersteller-Pakete installieren, deren Preinst eine EULA-Bestaetigung per Umgebungsvariable
+# verlangt (z. B. Broadcom niccli). live-build reicht keine Variablen an apt durch, daher
+# landen diese .deb ueber --vendor-tools in /var/lib/hpe-live/vendor-eula und werden hier
+# mit ACCEPT_EULA=yes installiert. Die EULA wurde beim Download durch den Ersteller akzeptiert.
+set -e
+DIR=/var/lib/hpe-live/vendor-eula
+[ -d "$DIR" ] || exit 0
+set -- "$DIR"/*.deb
+[ -e "$1" ] || { rmdir "$DIR" 2>/dev/null || true; exit 0; }
+echo "hpe-live: installiere Hersteller-Pakete mit EULA: $(for f in "$@"; do basename "$f"; done | tr '\n' ' ')"
+export ACCEPT_EULA=yes DEBIAN_FRONTEND=noninteractive
+if ! dpkg -i "$@"; then
+    apt-get install -y --fix-broken
+fi
+for f in "$@"; do
+    pkg="$(dpkg-deb -f "$f" Package)"
+    dpkg -s "$pkg" >/dev/null 2>&1 || { echo "hpe-live: $pkg nicht installiert" >&2; exit 1; }
+done
+rm -rf "$DIR"

@@ -289,7 +289,7 @@ VENDOR_TOOL_NAMES="niccli bnxtnvm bnxtmt qaucli qlnxcli qlnxtool nvmupdate64e ep
 # In Archiven enthaltene .deb/.rpm (z. B. Mellanox mft-*-deb.tgz) werden als eigene
 # Pakete zurückgegeben statt entpackt. Ausgabe: Liste der .deb-Dateien (eine je Zeile).
 vendor_extra_to_deb() {
-    local work root dest name f d inner ver
+    local work root dest name f d inner ver have_deb first fam w
     [ $# -gt 0 ] || return 0
     work="$(mktemp -d)"; root="$work/root"
     mkdir -p "$root/DEBIAN" "$root/opt/vendor-tools/bin" "$root/usr/local/sbin" "$ARTIFACTS/vendor"
@@ -300,33 +300,61 @@ vendor_extra_to_deb() {
                 dest="$root/opt/vendor-tools/$name"
                 mkdir -p "$dest"
                 bsdtar -xf "$f" -C "$dest" || die "--vendor-tools: $f lässt sich nicht entpacken"
+                chmod -R u+rwX "$dest"
                 # Einzelnes Top-Level-Verzeichnis hochziehen (mft-4.x-x86_64-deb/...)
                 if [ "$(find "$dest" -mindepth 1 -maxdepth 1 | wc -l)" = 1 ] && [ -d "$(find "$dest" -mindepth 1 -maxdepth 1)" ]; then
                     d="$(find "$dest" -mindepth 1 -maxdepth 1)"
                     mv "$d"/* "$d"/.[!.]* "$dest"/ 2>/dev/null || true
                     rmdir "$d" 2>/dev/null || true
                 fi
+                # Fremdplattform-Ordner entfernen (Windows, ESXi, FreeBSD, ARM, 32 Bit)
+                find "$dest" -depth -type d -regextype posix-extended \
+                    -iregex '.*/(win[^/]*|windows[^/]*|esx[^/]*|vmware[^/]*|freebsd[^/]*|[^/]*aarch64[^/]*|[^/]*arm64[^/]*|i386|i686|x86|32bit)' \
+                    -exec rm -rf {} + 2>/dev/null || true
+                # Nur amd64-Pakete; .deb bevorzugen, .rpm nur wenn das Archiv keine .deb enthält;
+                # Quell- und DKMS-Pakete (Kernelmodule) überspringen.
+                have_deb=0
+                [ -z "$(find "$dest" -type f -name '*.deb' ! -name '*dkms*' | head -n1)" ] || have_deb=1
                 while IFS= read -r inner; do
+                    case "$(basename "$inner")" in
+                        *.src.rpm|*dkms*|*aarch64*|*arm64*|*i386*|*i686*|*ppc64*|*riscv*|*.nosrc.rpm) continue ;;
+                    esac
                     case "$inner" in
-                        *.rpm) inner="$(vendor_rpm_to_deb "$inner")" ;;
+                        *.rpm) [ "$have_deb" = 1 ] && continue; inner="$(vendor_rpm_to_deb "$inner")" ;;
                         *.deb) cp "$inner" "$ARTIFACTS/vendor/"; inner="$ARTIFACTS/vendor/$(basename "$inner")" ;;
                     esac
                     printf '%s\n' "$inner"
                 done < <(find "$dest" -type f \( -name '*.deb' -o -name '*.rpm' \) | sort)
-                find "$dest" -type f \( -name '*.deb' -o -name '*.rpm' \) -delete
+                find "$dest" -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.md5sum' \) -delete
+                # Innere Archive sind durch das installierte Paket abgedeckt
+                [ "$have_deb" = 0 ] || find "$dest" -type f \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' \) -delete
                 # Linux-Binaries ausführbar machen (zip verliert Rechte)
                 find "$dest" -type f \( -name '*64e' -o -name 'niccli' -o -name 'bnxtnvm' -o -name 'qaucli' -o -name 'qlnxcli' -o -name 'sf*' -o -name '*.sh' \) -exec chmod +x {} + 2>/dev/null || true
                 ;;
             *)  cp "$f" "$root/opt/vendor-tools/bin/"; chmod 755 "$root/opt/vendor-tools/bin/$(basename "$f")" ;;
         esac
     done
-    # Symlinks für bekannte Kommandos (nur Linux-x86_64-Binaries, keine Windows/ARM-Varianten)
+    # Symlinks für bekannte Kommandos (nur Linux-x86_64-Binaries, keine Windows/ARM-Varianten;
+    # Skripte wie sfreport.pl werden unter dem reinen Namen verlinkt)
     for name in $VENDOR_TOOL_NAMES; do
-        d="$(find "$root/opt/vendor-tools" -type f -name "$name" -perm -u+x 2>/dev/null \
+        d="$(find "$root/opt/vendor-tools" -type f \( -name "$name" -o -name "$name.pl" -o -name "$name.sh" -o -name "$name.py" \) -perm -u+x 2>/dev/null \
              | grep -Ev '/(win|Win|windows|Windows|arm|aarch64|i386|32|ESX|esx|freebsd|FreeBSD|vmware)[^/]*/' | sort | head -n1)"
         [ -n "$d" ] || continue
+        [ "$name" = nvmupdate64e ] && continue
         ln -sf "/opt/vendor-tools/${d#"$root"/opt/vendor-tools/}" "$root/usr/local/sbin/$name"
     done
+    # Intel nvmupdate64e erwartet nvmupdate.cfg im Arbeitsverzeichnis und liegt je Adapterfamilie
+    # (700Series, E810, ...) getrennt vor: Wrapper nvmupdate64e-<familie> + nvmupdate64e (erste Variante).
+    first=1
+    while IFS= read -r d; do
+        fam="${d#"$root"/opt/vendor-tools/}"; fam="${fam%%/*}"; fam="${fam%%_*}"
+        fam="$(printf '%s' "$fam" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9\n' '-')"
+        for w in "nvmupdate64e-$fam" $([ "$first" = 1 ] && echo nvmupdate64e); do
+            printf '#!/bin/sh\ncd "%s" && exec ./nvmupdate64e "$@"\n' "/opt/vendor-tools/$(dirname "${d#"$root"/opt/vendor-tools/}")" >"$root/usr/local/sbin/$w"
+            chmod 755 "$root/usr/local/sbin/$w"
+        done
+        first=0
+    done < <(find "$root/opt/vendor-tools" -type f -name nvmupdate64e -perm -u+x 2>/dev/null | sort)
     find "$root/opt/vendor-tools" -mindepth 1 -type d -empty -delete 2>/dev/null || true
     if [ -n "$(find "$root/opt/vendor-tools" -mindepth 1 -type f 2>/dev/null | head -n1)" ]; then
         ver="$(date +%Y%m%d)"
@@ -481,8 +509,18 @@ if [ "$VENDOR_TOOLS" != none ]; then
         case "$f" in
             *.rpm) f="$(vendor_rpm_to_deb "$f")" ;;
         esac
-        cp "$f" "config/packages.chroot/vendor-$(basename "$f")"
-        echo "  + $(deb_field "$f" Package) $(deb_field "$f" Version)"
+        # live-build nimmt nur *_amd64.deb / *_all.deb -> Dateinamen aus Paketfeldern bilden
+        vdeb="vendor-$(deb_field "$f" Package)_$(deb_field "$f" Version | tr ':' '%')_$(deb_field "$f" Architecture).deb"
+        if dpkg-deb -I "$f" preinst 2>/dev/null | grep -q 'ACCEPT_EULA'; then
+            # Preinst verlangt ACCEPT_EULA=yes (z. B. Broadcom niccli); live-build reicht keine
+            # Umgebung durch -> Installation per Hook 0400 mit gesetzter Variable.
+            mkdir -p config/includes.chroot/var/lib/hpe-live/vendor-eula
+            cp "$f" "config/includes.chroot/var/lib/hpe-live/vendor-eula/$vdeb"
+            echo "  + $(deb_field "$f" Package) $(deb_field "$f" Version) (EULA, per Hook)"
+        else
+            cp "$f" "config/packages.chroot/$vdeb"
+            echo "  + $(deb_field "$f" Package) $(deb_field "$f" Version)"
+        fi
         printf '%s %s\n' "$(deb_field "$f" Package)" "$(deb_field "$f" Version)" >>config/includes.chroot/var/lib/hpe-live/vendor-tools
     done
 fi
