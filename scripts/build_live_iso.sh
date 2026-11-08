@@ -129,9 +129,21 @@ case "$VENDOR_TOOLS" in
     none|"") VENDOR_TOOLS=none ;;
     *) [ -d "$VENDOR_TOOLS" ] || die "--vendor-tools: Ordner $VENDOR_TOOLS nicht gefunden"
        VENDOR_TOOLS="$(readlink -f "$VENDOR_TOOLS")"
+       # .deb/.rpm werden direkt installiert; Archive (.tar.gz/.tgz/.tar.xz/.tar.bz2/.zip, z. B.
+       # Intel nvmupdate, Broadcom niccli, Mellanox mft-*.tgz) und lose ausführbare Binaries
+       # landen über das generierte Paket vendor-tools-extra unter /opt/vendor-tools.
        while IFS= read -r f; do VENDOR_PKGS+=("$f"); done < <(find "$VENDOR_TOOLS" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' \) | sort)
-       [ ${#VENDOR_PKGS[@]} -gt 0 ] || die "--vendor-tools: keine .deb/.rpm in $VENDOR_TOOLS"
-       for f in "${VENDOR_PKGS[@]}"; do case "$f" in *.rpm) need+=(bsdtar) ;; esac; done ;;
+       VENDOR_EXTRA=()
+       while IFS= read -r f; do
+           case "$f" in
+               *.deb|*.rpm|*.sha256|*.md5|*.txt|*.md|*.pdf|*.html) continue ;;
+               *.tar.gz|*.tgz|*.tar.xz|*.txz|*.tar.bz2|*.tbz2|*.tar|*.zip) VENDOR_EXTRA+=("$f") ;;
+               *) [ -x "$f" ] && VENDOR_EXTRA+=("$f") ;;
+           esac
+       done < <(find "$VENDOR_TOOLS" -maxdepth 1 -type f | sort)
+       [ $(( ${#VENDOR_PKGS[@]} + ${#VENDOR_EXTRA[@]} )) -gt 0 ] || die "--vendor-tools: keine .deb/.rpm/Archive/Binaries in $VENDOR_TOOLS"
+       for f in "${VENDOR_PKGS[@]}"; do case "$f" in *.rpm) need+=(bsdtar) ;; esac; done
+       [ ${#VENDOR_EXTRA[@]} -eq 0 ] || need+=(bsdtar) ;;
 esac
 [ "$NVIDIA" = "none" ] || need+=(rsync mksquashfs unsquashfs)
 for c in "${need[@]}"; do
@@ -268,6 +280,73 @@ EOF
     printf '%s\n' "$deb"
 }
 
+# Bekannte Hersteller-Kommandos, die aus /opt/vendor-tools nach /usr/local/sbin
+# verlinkt werden (Hardwaretest und hpe-live-check finden sie dann im PATH).
+VENDOR_TOOL_NAMES="niccli bnxtnvm bnxtmt qaucli qlnxcli qlnxtool nvmupdate64e epct64e epct mst mlxconfig mlxfwmanager mlxup mlxlink mlxcables flint mlxburn sfupdate sfreport sfboot sfkey sfctool hbacmd"
+
+# Archive und lose Binaries aus --vendor-tools in ein .deb vendor-tools-extra packen:
+# Archive -> /opt/vendor-tools/<archivname>/, Binaries -> /opt/vendor-tools/bin/.
+# In Archiven enthaltene .deb/.rpm (z. B. Mellanox mft-*-deb.tgz) werden als eigene
+# Pakete zurückgegeben statt entpackt. Ausgabe: Liste der .deb-Dateien (eine je Zeile).
+vendor_extra_to_deb() {
+    local work root dest name f d inner ver
+    [ $# -gt 0 ] || return 0
+    work="$(mktemp -d)"; root="$work/root"
+    mkdir -p "$root/DEBIAN" "$root/opt/vendor-tools/bin" "$root/usr/local/sbin" "$ARTIFACTS/vendor"
+    for f in "$@"; do
+        case "$f" in
+            *.tar.gz|*.tgz|*.tar.xz|*.txz|*.tar.bz2|*.tbz2|*.tar|*.zip)
+                name="$(basename "$f")"; name="${name%.tar.*}"; name="${name%.*}"
+                dest="$root/opt/vendor-tools/$name"
+                mkdir -p "$dest"
+                bsdtar -xf "$f" -C "$dest" || die "--vendor-tools: $f lässt sich nicht entpacken"
+                # Einzelnes Top-Level-Verzeichnis hochziehen (mft-4.x-x86_64-deb/...)
+                if [ "$(find "$dest" -mindepth 1 -maxdepth 1 | wc -l)" = 1 ] && [ -d "$(find "$dest" -mindepth 1 -maxdepth 1)" ]; then
+                    d="$(find "$dest" -mindepth 1 -maxdepth 1)"
+                    mv "$d"/* "$d"/.[!.]* "$dest"/ 2>/dev/null || true
+                    rmdir "$d" 2>/dev/null || true
+                fi
+                while IFS= read -r inner; do
+                    case "$inner" in
+                        *.rpm) inner="$(vendor_rpm_to_deb "$inner")" ;;
+                        *.deb) cp "$inner" "$ARTIFACTS/vendor/"; inner="$ARTIFACTS/vendor/$(basename "$inner")" ;;
+                    esac
+                    printf '%s\n' "$inner"
+                done < <(find "$dest" -type f \( -name '*.deb' -o -name '*.rpm' \) | sort)
+                find "$dest" -type f \( -name '*.deb' -o -name '*.rpm' \) -delete
+                # Linux-Binaries ausführbar machen (zip verliert Rechte)
+                find "$dest" -type f \( -name '*64e' -o -name 'niccli' -o -name 'bnxtnvm' -o -name 'qaucli' -o -name 'qlnxcli' -o -name 'sf*' -o -name '*.sh' \) -exec chmod +x {} + 2>/dev/null || true
+                ;;
+            *)  cp "$f" "$root/opt/vendor-tools/bin/"; chmod 755 "$root/opt/vendor-tools/bin/$(basename "$f")" ;;
+        esac
+    done
+    # Symlinks für bekannte Kommandos (nur Linux-x86_64-Binaries, keine Windows/ARM-Varianten)
+    for name in $VENDOR_TOOL_NAMES; do
+        d="$(find "$root/opt/vendor-tools" -type f -name "$name" -perm -u+x 2>/dev/null \
+             | grep -Ev '/(win|Win|windows|Windows|arm|aarch64|i386|32|ESX|esx|freebsd|FreeBSD|vmware)[^/]*/' | sort | head -n1)"
+        [ -n "$d" ] || continue
+        ln -sf "/opt/vendor-tools/${d#"$root"/opt/vendor-tools/}" "$root/usr/local/sbin/$name"
+    done
+    find "$root/opt/vendor-tools" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+    if [ -n "$(find "$root/opt/vendor-tools" -mindepth 1 -type f 2>/dev/null | head -n1)" ]; then
+        ver="$(date +%Y%m%d)"
+        cat >"$root/DEBIAN/control" <<EOF
+Package: vendor-tools-extra
+Version: ${ver}
+Architecture: amd64
+Maintainer: Hardwaretest Live ISO <noreply@localhost>
+Section: non-free/admin
+Priority: optional
+Description: Hersteller-Werkzeuge aus Archiven/Binaries (--vendor-tools)
+ Proprietaer, nur fuer den internen Gebrauch. Inhalt unter /opt/vendor-tools,
+ bekannte Kommandos sind nach /usr/local/sbin verlinkt.
+EOF
+        dpkg-deb --root-owner-group -Zxz -b "$root" "$ARTIFACTS/vendor/vendor-tools-extra_${ver}_amd64.deb" >/dev/null
+        printf '%s\n' "$ARTIFACTS/vendor/vendor-tools-extra_${ver}_amd64.deb"
+    fi
+    rm -rf "$work"
+}
+
 log "Hole App-Artefakte"
 HT_DEB="$(resolve_deb "$HARDWARETEST" "$HARDWARETEST_REPO" '^hardwaretest_.*_amd64\.deb$')"
 JV_DEB="$(resolve_deb "$JSON_VIEWER" "$JSON_VIEWER_REPO" '^[Jj][Ss][Oo][Nn].*_amd64\.deb$')"
@@ -391,9 +470,13 @@ cp "$JV_DEB" "config/packages.chroot/$(deb_field "$JV_DEB" Package)_${JV_VER}_am
 [ -z "$ILO_DEB" ] || cp "$ILO_DEB" "config/packages.chroot/ilorest_${ILO_VER}_amd64.deb"
 [ -z "$BTOP_DEB" ] || cp "$BTOP_DEB" "config/packages.chroot/btop_$(deb_field "$BTOP_DEB" Version)_amd64.deb"
 if [ "$VENDOR_TOOLS" != none ]; then
-    log "Hersteller-Werkzeuge (internes ISO): ${#VENDOR_PKGS[@]} Paket(e) aus $VENDOR_TOOLS"
+    log "Hersteller-Werkzeuge (internes ISO): ${#VENDOR_PKGS[@]} Paket(e), ${#VENDOR_EXTRA[@]} Archiv(e)/Binaries aus $VENDOR_TOOLS"
     mkdir -p config/includes.chroot/var/lib/hpe-live
     : >config/includes.chroot/var/lib/hpe-live/vendor-tools
+    if [ ${#VENDOR_EXTRA[@]} -gt 0 ]; then
+        extra_debs="$(vendor_extra_to_deb "${VENDOR_EXTRA[@]}")" || die "--vendor-tools: Archive konnten nicht verarbeitet werden"
+        while IFS= read -r f; do [ -n "$f" ] && VENDOR_PKGS+=("$f"); done <<<"$extra_debs"
+    fi
     for f in "${VENDOR_PKGS[@]}"; do
         case "$f" in
             *.rpm) f="$(vendor_rpm_to_deb "$f")" ;;

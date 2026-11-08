@@ -89,10 +89,11 @@ if [ -s /var/lib/hpe-live/vendor-tools ]; then
         [ -n "$pkg" ] || continue
         if dpkg-query -W -f='${db:Status-Abbrev}' "$pkg" 2>/dev/null | grep -q '^ii'; then ok "Paket $pkg $ver"; else bad "Paket $pkg $ver"; fi
     done </var/lib/hpe-live/vendor-tools
-    for c in qaucli hbacmd mlxlink mlxcables mst; do
-        p=$(command -v "$c" 2>/dev/null) || p=$(find /opt -maxdepth 4 -type f -name "$c" 2>/dev/null | head -n1)
+    for c in qaucli qlnxcli hbacmd mst mlxlink mlxcables mlxconfig mlxfwmanager flint niccli bnxtnvm nvmupdate64e epct64e epct sfupdate sfreport sfboot; do
+        p=$(command -v "$c" 2>/dev/null) || p=$(find /opt /usr/local/sbin -maxdepth 6 -type f -name "$c" 2>/dev/null | head -n1)
         [ -z "$p" ] || ok "$c ($p)"
     done
+    [ ! -d /opt/vendor-tools ] || ok "/opt/vendor-tools: $(find /opt/vendor-tools -mindepth 1 -maxdepth 1 -printf '%f ' 2>/dev/null)"
 else
     echo "Hersteller-Werkzeuge: keine (externes ISO) - FC-HBA/Ethernet-Diagnose nur über sysfs/ethtool"
 fi

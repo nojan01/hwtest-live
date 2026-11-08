@@ -14,9 +14,10 @@ Das System läuft komplett im RAM (`toram`), installiert nichts auf die Server�
 > **Zwei Ausprägungen:** Das **externe ISO** (Standard‑Build) enthält nur frei weitergebbare
 > Komponenten (HPE‑Pakete aus dem öffentlichen SDR, NVIDIA‑Treiber aus dem CUDA‑Repo) und wird
 > als Release veröffentlicht. Das **interne ISO** (`--vendor-tools DIR`, Namenszusatz `-intern`)
-> enthält zusätzlich Hersteller‑Werkzeuge für FC‑HBAs und Ethernet‑Adapter (QLogic `qaucli`,
-> Emulex `hbacmd`, Mellanox MFT) und ggf. MemTest86 Pro, deren EULA keine Weitergabe erlaubt –
-> nur für den internen Gebrauch, nicht veröffentlichen.
+> enthält zusätzlich Hersteller‑Werkzeuge für FC‑HBAs und Ethernet‑Adapter (QLogic/Marvell `qaucli`,
+> `qlnxcli`, Emulex `hbacmd`, Mellanox/NVIDIA MFT, Broadcom `niccli`/`bnxtnvm`, Intel
+> `nvmupdate64e`/`epct`, Solarflare/AMD `sfupdate`/`sfreport`) und ggf. MemTest86 Pro, deren EULA
+> keine Weitergabe erlaubt – nur für den internen Gebrauch, nicht veröffentlichen.
 > Lizenzen der Drittkomponenten: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md)
 > (im Image unter `/usr/local/share/doc/hpe-live/`).
 
@@ -135,7 +136,7 @@ Alternativ Variante B verwenden.
 | `--ilorest latest\|none\|DATEI.rpm\|DATEI.deb` / `ILOREST` | iLOrest von `HewlettPackard/python-redfish-utility` |
 | `--btop backport\|trixie\|DATEI.deb` / `BTOP` | `backport` (Default): btop 1.4.7 aus Debian sid (SHA256-geprüft, läuft auf trixie). btop 1.3.2 aus trixie zeigt bei vielen Threads (z. B. 2×16 Kerne mit HT) keine Einzelkerne. `trixie` = Paket aus trixie |
 | `--memtest86 none\|DATEI.img\|DIR` / `MEMTEST86` | PassMark MemTest86 (UEFI) zusätzlich ins Bootmenü. `memtest86-usb.img` bzw. `memtest86-pro-usb.img` aus dem PassMark‑ZIP (Free oder Pro) oder Ordner mit `BOOTX64.efi`; `mt86.cfg` u. a. werden mit übernommen. Proprietär, wird nicht im Repo abgelegt. Default `none` |
-| `--vendor-tools none\|DIR` / `VENDOR_TOOLS` | Hersteller‑Werkzeuge aus `DIR` (alle `.deb`/`.rpm` darin) mitinstallieren → **internes ISO** (`-intern` im Namen). `.rpm` werden umgepackt (mit `alien` inkl. Skripte, sonst reine Dateikopie). Die Pakete landen in der Basis‑Schicht `filesystem.squashfs` und sind damit in **jedem** Bootmodus (auch nouveau/`toram=filesystem.squashfs`) verfügbar. Typisch: `hp-qaucli`/`QConvergeConsoleCLI` (QLogic/Marvell FC), `hp-elxocmcore` (Emulex `hbacmd`), Mellanox `mft` (`mlxlink`, `mlxcables`). `hpe-live-check` listet sie. Default `none` |
+| `--vendor-tools none\|DIR` / `VENDOR_TOOLS` | Hersteller‑Werkzeuge aus `DIR` mitinstallieren → **internes ISO** (`-intern` im Namen). Akzeptiert `.deb`/`.rpm` (`.rpm` werden umgepackt: mit `alien` inkl. Skripte, sonst reine Dateikopie), außerdem Archive (`.tar.gz`/`.tgz`/`.tar.xz`/`.zip`) und lose ausführbare Binaries: Diese landen über das generierte Paket `vendor-tools-extra` unter `/opt/vendor-tools/<Archivname>/` bzw. `/opt/vendor-tools/bin/`; bekannte Kommandos (`niccli`, `bnxtnvm`, `qaucli`, `qlnxcli`, `nvmupdate64e`, `epct64e`, `mst`, `mlx*`, `flint`, `sfupdate`, `sfreport`, `sfboot`, `hbacmd`) werden nach `/usr/local/sbin` verlinkt. In Archiven enthaltene `.deb`/`.rpm` (z. B. `mft-*-x86_64-deb.tgz`) werden als Pakete installiert. Alles landet in der Basis‑Schicht `filesystem.squashfs` und ist damit in **jedem** Bootmodus (auch nouveau/`toram=filesystem.squashfs`) verfügbar. `hpe-live-check` listet die Werkzeuge; Hardwaretest (Tab Netzwerk → *Hersteller‑Diagnose*) nutzt sie automatisch. Default `none` |
 | `--no-strip-modules` / `STRIP_KERNEL_MODULES=0` | Sound-, WLAN- und Media-Kernelmodule usw. behalten |
 | `--mirror URL` / `MIRROR` | lokaler Debian-Mirror bzw. apt-cacher-ng |
 | `GITHUB_TOKEN` | für GitHub-API-Rate-Limits oder private Repos |
@@ -292,6 +293,14 @@ Nur im **internen ISO** (`--vendor-tools`):
 | `sudo qaucli -pr fc -g` / `-pr fc -i <hba>` | QLogic/Marvell FC‑HBAs: Übersicht, Port‑Details, Loopback‑/Diagnosetest, SFP‑Daten |
 | `sudo hbacmd ListHBAs` / `hbacmd LoopBackTest <WWPN> …` / `hbacmd GetXcvrData <WWPN>` | Emulex/Broadcom FC‑HBAs: Übersicht, Loopback‑/Echo‑Test, Transceiver |
 | `sudo mst start && sudo mlxlink -d <dev>` / `mlxcables` | Mellanox/NVIDIA Ethernet: Link‑Diagnose (BER, Eye), Kabel/Transceiver |
+| `sudo mlxfwmanager --query` / `sudo mlxconfig -d <bdf> query` | Mellanox/NVIDIA: Firmware‑Inventar, Port‑/Konfigurationsabfrage |
+| `sudo niccli --list` / `niccli -i <n> show` / `link -s` / `cable -m --show` / `linkdiag --loopback --show` | Broadcom NetXtreme‑E (`bnxt_en`): Adapterliste, Geräte‑/Firmware‑Info, Link‑Status, Transceiver, Loopback‑Status |
+| `sudo bnxtnvm -dev=<if> device_info` | Broadcom NetXtreme‑E (älteres NVM‑Tool): Geräteinfo |
+| `sudo qaucli -pr nic -i` / `qlnxcli` | Marvell/QLogic FastLinQ (`qede`, `bnx2x`): Adapterübersicht, Port‑Details, Diagnose |
+| `sudo nvmupdate64e -i -l -o inv.xml` / `sudo epct64e -devices` / `epct64e -nic=<n> -get` | Intel Ethernet (`i40e`, `ice`, `ixgbe`, `igb`): NVM‑/Firmware‑Inventar, Port‑Konfiguration |
+| `sudo sfupdate` / `sudo sfboot` / `sudo sfreport` | Solarflare/Xilinx/AMD (`sfc`): Firmware‑Inventar, Boot‑/Adapterkonfiguration, HTML‑Diagnosebericht |
+
+Hardwaretest (Tab Netzwerk → **Hersteller‑Diagnose**) erkennt diese Werkzeuge anhand des Treibers der gewählten Schnittstelle und führt nur lesende Inventar‑/Diagnosebefehle aus (Bericht als HTML). Die Werkzeuge selbst sind proprietär und müssen vom jeweiligen Hersteller geladen und in den `--vendor-tools`‑Ordner gelegt werden (Broadcom: *NetXtreme‑E niccli Utility – Linux* tar.gz; Intel: *NVM Update Package* bzw. *Ethernet Port Configuration Tool* tar.gz; NVIDIA: `mft-<ver>-x86_64-deb.tgz`; AMD/Solarflare: *Linux Utilities* rpm/tgz; Marvell: *QConvergeConsole CLI* rpm). Chelsio‑Werkzeuge werden bewusst nicht integriert.
 
 Ohne diese Werkzeuge liefert Hardwaretest (Tab System → Fibre‑Channel‑HBAs, Tab Netzwerk → ethtool) die herstellerunabhängigen Daten aus sysfs und `ethtool`. Für Mellanox/NVIDIA‑Ethernet ist das **freie** `mstflint` (`mstlink`) in beiden ISO‑Ausprägungen enthalten; Hardwaretest bietet damit im Tab Netzwerk die Link‑Diagnose an.
 
