@@ -87,3 +87,28 @@ rm -rf /usr/share/doc-base /var/cache/apt/*.bin /var/cache/debconf/*-old \
     /var/lib/apt/lists/* /var/log/apt/* 2>/dev/null || true
 find /usr/share/doc -mindepth 1 -not -name copyright -not -type d -delete 2>/dev/null || true
 find /usr/share/doc -mindepth 1 -type d -empty -delete 2>/dev/null || true
+
+# NVIDIA DCGM: nur die CUDA-Bibliotheken behalten, die die Diagnose-Plugins
+# (dcgmi diag -r 1..4: Software, PCIe, Memory, Memtest, Diagnostic, Targeted
+# Stress/Power, NVBandwidth) tatsächlich laden - cuBLAS/cuBLASLt. cuSPARSELt,
+# cuRAND und NCCL (~570 MB) werden von keinem Standard-Plugin referenziert;
+# der NCCL-Test ist bei keiner Stufe enthalten (nur explizit "-r nccl").
+DCGM=/usr/libexec/datacenter-gpu-manager-4
+if [ -d "$DCGM" ]; then
+    before=$(du -sm "$DCGM" | cut -f1)
+    rm -f "$DCGM"/cuda*/lib/libcusparseLt* "$DCGM"/cuda*/lib/libcurand* "$DCGM"/cuda*/lib/libnccl* \
+        "$DCGM"/plugins/cuda*/libNcclTests* 2>/dev/null || true
+    echo "hpe-live: DCGM ${before} MB -> $(du -sm "$DCGM" | cut -f1) MB (ohne cuSPARSELt/cuRAND/NCCL)"
+fi
+
+# NVIDIA MFT: Register-Dump-Datenbanken (mstdump, ~50 MB) werden nicht benötigt;
+# mlxconfig/mlxfwmanager/mlxlink arbeiten ohne sie.
+rm -rf /usr/share/mft/mstdump_dbs 2>/dev/null || true
+
+# Übersetzungen: nur Deutsch und Englisch behalten (Hardwaretest bringt eigene mit)
+if [ -d /usr/share/locale ]; then
+    find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+        ! -name 'de' ! -name 'de_*' ! -name 'en' ! -name 'en_*' ! -name 'C' ! -name 'locale.alias' \
+        -exec rm -rf {} + 2>/dev/null || true
+fi
+find /usr/share/man -mindepth 1 -maxdepth 1 -type d -name '??*' ! -name 'man*' ! -name 'de*' ! -name 'en*' -exec rm -rf {} + 2>/dev/null || true

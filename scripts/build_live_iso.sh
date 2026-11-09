@@ -328,6 +328,13 @@ vendor_extra_to_deb() {
                 find "$dest" -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.md5sum' \) -delete
                 # Innere Archive sind durch das installierte Paket abgedeckt
                 [ "$have_deb" = 0 ] || find "$dest" -type f \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' \) -delete
+                # Intel NVM Update Package: die Firmware-Images (*.bin, ~1 GB) werden nicht
+                # gebraucht – Hardwaretest/ISO nutzen nur das Inventar (nvmupdate64e -i), nie Flash.
+                if [ -n "$(find "$dest" -type f -name 'nvmupdate64e' | head -n1)" ]; then
+                    nbin=$(find "$dest" -type f -name '*.bin' | wc -l)
+                    find "$dest" -type f -name '*.bin' -delete
+                    echo "  $name: $nbin Firmware-Images (*.bin) entfernt – nur Inventar (nvmupdate64e -i)" >&2
+                fi
                 # Linux-Binaries ausführbar machen (zip verliert Rechte)
                 find "$dest" -type f \( -name '*64e' -o -name 'niccli' -o -name 'bnxtnvm' -o -name 'qaucli' -o -name 'qlnxcli' -o -name 'sf*' -o -name '*.sh' \) -exec chmod +x {} + 2>/dev/null || true
                 ;;
@@ -706,11 +713,14 @@ set +e
 {
     lb bootstrap && lb chroot && {
         NV_FILES="$BUILD_DIR/chroot/var/lib/hpe-live/nvidia-layer/files"
+        mkdir -p config/rootfs
+        # Kernel und initrd liegen bereits in /live auf dem ISO; die Kopien unter /boot im
+        # Squashfs (~110 MB) braucht das Live-System nicht (live-boot bootet aus /live).
+        printf '%s\n' 'boot/vmlinuz-*' 'boot/initrd.img-*' 'boot/System.map-*' 'boot/config-*' >config/rootfs/excludes
         if [ "$NVIDIA" != none ] && [ -s "$NV_FILES" ]; then
-            mkdir -p config/rootfs
             # mksquashfs -wildcards: Pfade relativ zum chroot, Sonderzeichen maskieren
-            sed -e 's|^/*||' -e '/^$/d' -e 's/[][*?\\]/\\&/g' "$NV_FILES" >config/rootfs/excludes
-            echo "hpe-live: $(wc -l <config/rootfs/excludes) Dateien werden aus filesystem.squashfs ausgeschlossen (-> nvidia.squashfs)"
+            sed -e 's|^/*||' -e '/^$/d' -e 's/[][*?\\]/\\&/g' "$NV_FILES" >>config/rootfs/excludes
+            echo "hpe-live: $(wc -l <"$NV_FILES") Dateien werden aus filesystem.squashfs ausgeschlossen (-> nvidia.squashfs)"
         elif [ "$NVIDIA" != none ]; then
             echo "hpe-live: FEHLER - $NV_FILES fehlt (Chroot-Hook 0800 nicht gelaufen?)" >&2
             false

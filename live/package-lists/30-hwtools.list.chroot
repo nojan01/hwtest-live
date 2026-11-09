@@ -40,6 +40,8 @@ ntfs-3g
 exfatprogs
 gdisk
 testdisk
+# Grafische Partitionierung (Administrator)
+gparted
 # VMware-ESXi-Datenspeicher lesend prüfen (fsck.vmfs6 / fsck.vmfs, Hardwaretest Dateisystem-Tab)
 vmfs6-tools
 vmfs-tools
