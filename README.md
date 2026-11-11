@@ -251,6 +251,9 @@ Hinweise:
 * Tastatur `de`, Zeitzone `Europe/Berlin`, Sprache `de_DE.UTF-8`. Beim Build änderbar über `KEYBOARD=us`,
   `TIMEZONE=…` und `LOCALE=en_US.UTF-8`, zur Laufzeit über die Bootparameter `keyboard-layouts=us` bzw.
   `locales=en_US.UTF-8`.
+* Alle Builds booten mit `iomem=relaxed`: Hersteller‑Werkzeuge wie Broadcom `niccli` greifen aus dem Userspace
+  auf die PCI‑BAR zu; mit dem Kernel‑Treiber (`bnxt_en`) und `CONFIG_IO_STRICT_DEVMEM` liefern sie sonst keine
+  Firmware‑Daten („Not Available“, „Device Health: Bad“). Der Parameter lockert den `/dev/mem`‑Schutz.
 * NVIDIA‑Builds booten mit `iommu=pt` (IOMMU aktiv, Host‑DMA identity‑mapped – üblich auf GPU‑Knoten). Ohne
   diesen Parameter scheitert der DCGM‑PCIe‑Peer‑to‑Peer‑Test bei aktivem VT‑d/ACS mit „buffer mismatch“. Bei GPUs
   hinter PCIe‑Switches (Synergy‑Grafikmodul) hilft nur „PCIe‑P2P‑Test überspringen“ im Hardwaretest.

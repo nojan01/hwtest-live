@@ -444,6 +444,10 @@ cd "$BUILD_DIR"
 BOOTAPPEND="boot=live components toram hostname=hwtest-live username=user"
 BOOTAPPEND+=" keyboard-layouts=${KEYBOARD} timezone=${TIMEZONE} locales=${LOCALE}"
 BOOTAPPEND+=" console=ttyS0,115200n8 console=tty0"
+# iomem=relaxed: Hersteller-Werkzeuge (Broadcom niccli) blenden die PCI-BAR aus dem Userspace
+# ein; bei CONFIG_IO_STRICT_DEVMEM und geladenem Kernel-Treiber (bnxt_en) scheitert das sonst
+# ("Firmware Version: Not Available", "Device Health: Bad", link -s -> 0C00A002).
+BOOTAPPEND+=" iomem=relaxed"
 # iommu=pt: IOMMU bleibt aktiv, Host-DMA laeuft aber identity-mapped. Standard auf
 # GPU-/HPC-Knoten; ohne das scheitert der DCGM-PCIe-P2P-Test bei aktivem VT-d/ACS
 # mit "buffer mismatch". Haengen die GPUs hinter PCIe-Switches (Synergy-Grafikmodul),
