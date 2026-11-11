@@ -1,0 +1,21 @@
+#!/bin/sh
+# Pipe-Zeichen ohne AltGr: Ueber die iLO-HTML5-Konsole kommt AltGr oft nicht im System an,
+# auf deutscher Tastatur fehlt dann "|" (AltGr+<). Zwei unabhaengige Wege:
+#  1) Shell (bash/readline, auch Textkonsole, seriell, SSH): F8 fuegt "|" ein.
+#  2) Grafische Oberflaeche (jedes Fenster): Strg+Alt+P oder Umschalt+F8 tippt "|" (xdotool).
+# Idempotent; wird auch vom Alma-Build aufgerufen.
+set -eu
+
+if [ -f /etc/inputrc ] && ! grep -q 'hpe-live: Pipe' /etc/inputrc; then
+    cat >>/etc/inputrc <<'EOF'
+
+# hpe-live: Pipe-Zeichen auf F8 (iLO-Konsole ohne AltGr)
+"\e[19~": "|"
+EOF
+fi
+
+rc=/etc/xdg/openbox/rc.xml
+if [ -f "$rc" ] && ! grep -q 'hpe-live-type' "$rc"; then
+    sed -i 's#</keyboard>#  <keybind key="C-A-p"><action name="Execute"><command>hpe-live-type -k p "|"</command></action></keybind>\n  <keybind key="S-F8"><action name="Execute"><command>hpe-live-type -k F8 "|"</command></action></keybind>\n</keyboard>#' "$rc"
+    grep -q 'hpe-live-type' "$rc" || echo "WARNUNG: Openbox-Tastenkuerzel fuer das Pipe-Zeichen nicht eingetragen" >&2
+fi

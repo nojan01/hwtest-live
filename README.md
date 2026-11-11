@@ -257,6 +257,9 @@ Hinweise:
 * NVIDIA‑Builds booten mit `iommu=pt` (IOMMU aktiv, Host‑DMA identity‑mapped – üblich auf GPU‑Knoten). Ohne
   diesen Parameter scheitert der DCGM‑PCIe‑Peer‑to‑Peer‑Test bei aktivem VT‑d/ACS mit „buffer mismatch“. Bei GPUs
   hinter PCIe‑Switches (Synergy‑Grafikmodul) hilft nur „PCIe‑P2P‑Test überspringen“ im Hardwaretest.
+* Pipe‑Zeichen ohne AltGr: Über die iLO‑HTML5‑Konsole kommt AltGr häufig nicht im System an, auf deutscher
+  Tastatur fehlt dann `|`. In der Shell (bash, auch Textkonsole/seriell/SSH) fügt **F8** ein `|` ein; im Desktop
+  tippt **Strg+Alt+P** oder **Umschalt+F8** ein `|` in das aktive Fenster (`hpe-live-type`, Hook 0610).
 * Caps Lock ist im Desktop deaktiviert (`caps:none`): Die iLO‑HTML5‑Konsole gleicht den Caps‑Lock‑Zustand des
   Browsers per simuliertem Tastendruck ab, wodurch sonst der Lock‑Modifier hängen bleibt (alles groß).
   Falls doch nötig: Menü „Tastatur zurücksetzen“ bzw. `hpe-live-keyboard-reset`.
