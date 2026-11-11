@@ -18,6 +18,7 @@
     <item label="Systemcheck (hpe-live-check)"><action name="Execute"><command>x-terminal-emulator -T hpe-live-check -hold -e sudo hpe-live-check</command></action></item>
     <separator />
     <item label="Tastatur zurücksetzen (Caps Lock hängt)"><action name="Execute"><command>hpe-live-keyboard-reset</command></action></item>
+    <item label="Tastenbelegung Sonderzeichen (iLO)"><action name="Execute"><command>x-terminal-emulator -T Tastenbelegung -hold -e hpe-live-keys</command></action></item>
     <item label="Openbox neu laden"><action name="Reconfigure" /></item>
     <item label="Neustart"><action name="Execute"><command>systemctl reboot</command></action></item>
     <item label="Ausschalten"><action name="Execute"><command>systemctl poweroff</command></action></item>

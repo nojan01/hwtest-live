@@ -1,0 +1,3 @@
+#!/bin/sh
+# Tastenbelegung der Sonderzeichen ohne AltGr anzeigen (iLO-Konsole), siehe Hook 0610.
+exec cat /usr/local/share/hpe-live/sonderzeichen.txt

@@ -1,0 +1,27 @@
+Sonderzeichen ohne AltGr (iLO-Konsole, deutsche Tastatur)
+=========================================================
+
+Über die iLO-HTML5-Konsole kommt die Taste AltGr oft nicht im System an.
+Ersatz: Strg+Alt zusammen mit derselben Taste, auf der das Zeichen
+aufgedruckt ist (also "Strg+Alt statt AltGr").
+
+  Zeichen   Desktop (jedes Fenster)   Shell (bash)
+  -------   -----------------------   ------------
+     |      Strg+Alt+<   Strg+Alt+P       F8
+     \      Strg+Alt+ß                    F4
+     @      Strg+Alt+Q                    F2
+     ~      Strg+Alt++                    F3
+     {      Strg+Alt+7                    F9
+     }      Strg+Alt+0                    F10
+     [      Strg+Alt+8                    F6
+     ]      Strg+Alt+9                    F7
+     €      Strg+Alt+E                    -
+
+Desktop: gilt in allen Fenstern der grafischen Oberfläche (Terminal,
+         Hardwaretest, Eingabefelder). Umschalt+F8 tippt ebenfalls "|".
+Shell:   gilt in jeder bash-Eingabezeile, auch auf der Textkonsole
+         (Strg+Alt+F2 …), seriell und per SSH. In Programmen wie htop
+         behalten die F-Tasten ihre normale Funktion.
+
+Diese Liste anzeigen: Befehl "hpe-live-keys" oder Desktop-Menü
+(Rechtsklick) -> "Tastenbelegung Sonderzeichen (iLO)".

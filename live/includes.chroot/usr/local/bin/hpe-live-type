@@ -1,12 +1,23 @@
 #!/bin/sh
-# Zeichen in das aktive Fenster tippen – unabhaengig vom Tastaturlayout.
-# Hintergrund: Ueber die iLO-HTML5-Konsole kommt AltGr oft nicht an, damit fehlen auf
-# deutscher Tastatur u. a. | \ @ ~. Openbox ruft dieses Skript ueber Tastenkuerzel auf
-# (Strg+Alt+P bzw. Umschalt+F8 fuer das Pipe-Zeichen, siehe Hook 0610).
-# Aufruf: hpe-live-type [-k AUSLOESETASTE] TEXT
+# Sonderzeichen in das aktive Fenster tippen – unabhaengig von AltGr.
+# Hintergrund: Ueber die iLO-HTML5-Konsole kommt AltGr oft nicht im System an, auf deutscher
+# Tastatur fehlen dann | \ @ ~ { } [ ] €. Openbox ruft dieses Skript ueber Tastenkuerzel auf
+# (Strg+Alt+<Taste des Zeichens>, siehe Hook 0610 und "hpe-live-keys").
+# Aufruf: hpe-live-type [-k AUSLOESETASTE] NAME
 keys=""
 while [ "${1:-}" = "-k" ] && [ $# -ge 2 ]; do keys="$keys keyup $2"; shift 2; done
-[ $# -ge 1 ] || { echo "Aufruf: hpe-live-type [-k TASTE] TEXT" >&2; exit 2; }
+case "${1:-}" in
+    pipe)      text='|' ;;
+    backslash) text='\' ;;
+    at)        text='@' ;;
+    tilde)     text='~' ;;
+    lbrace)    text='{' ;;
+    rbrace)    text='}' ;;
+    lbracket)  text='[' ;;
+    rbracket)  text=']' ;;
+    euro)      text='€' ;;
+    *) echo "Aufruf: hpe-live-type [-k TASTE] pipe|backslash|at|tilde|lbrace|rbrace|lbracket|rbracket|euro" >&2; exit 2 ;;
+esac
 command -v xdotool >/dev/null 2>&1 || { echo "xdotool fehlt" >&2; exit 1; }
 # Openbox startet das Skript beim Druecken; solange das Kuerzel gehalten wird, gehoeren alle
 # Tastaturereignisse Openbox (Tastengriff) und Strg/Alt/Umschalt wuerden das Zeichen verfaelschen.
@@ -14,4 +25,4 @@ command -v xdotool >/dev/null 2>&1 || { echo "xdotool fehlt" >&2; exit 1; }
 # wuerde haengende Tasten erzeugen, wenn der Benutzer inzwischen losgelassen hat).
 # shellcheck disable=SC2086
 xdotool $keys keyup Control_L keyup Control_R keyup Alt_L keyup Shift_L keyup Shift_R 2>/dev/null
-exec xdotool type -- "$1"
+exec xdotool type -- "$text"
