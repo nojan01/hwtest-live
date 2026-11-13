@@ -112,6 +112,7 @@ elfutils-libelf-devel
 xfsprogs
 btrfs-progs
 dosfstools
+mtools
 squashfs-tools
 ntfs-3g
 exfatprogs

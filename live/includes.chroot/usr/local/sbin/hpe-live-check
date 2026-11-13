@@ -82,7 +82,7 @@ else
 fi
 echo "Diagnose-Tools:"
 check_cmd btop htop stress-ng fio iperf3 nvme smartctl hdparm sg_inq mdadm lvm pvs \
-    lsblk swapon swapoff mkfs.ext4 lshw lspci lsusb dmidecode sensors edac-util ras-mc-ctl \
+    lsblk swapon swapoff mkfs.ext4 mkfs.fat mlabel lshw lspci lsusb dmidecode sensors edac-util ras-mc-ctl \
     ipmitool jq pkexec sudo zpool zfs fastfetch zramctl gparted
 if package_installed memtest86+ && ls /boot/memtest86+* >/dev/null 2>&1; then
     ok "memtest86+ (Paket, fuer Hardwaretest-Pruefung)"

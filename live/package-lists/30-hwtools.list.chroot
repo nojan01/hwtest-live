@@ -40,8 +40,10 @@ ntfs-3g
 exfatprogs
 gdisk
 testdisk
-# Grafische Partitionierung (Administrator)
+# Grafische Partitionierung (Administrator); FAT16/FAT32 braucht dosfstools (oben)
+# und mtools (Label/UUID lesen und ändern)
 gparted
+mtools
 # VMware-ESXi-Datenspeicher lesend prüfen (fsck.vmfs6 / fsck.vmfs, Hardwaretest Dateisystem-Tab)
 vmfs6-tools
 vmfs-tools
