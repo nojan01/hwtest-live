@@ -52,6 +52,19 @@ if [ -f /etc/xdg/openbox/rc.xml ] && ! grep -q 'title="btop"' /etc/xdg/openbox/r
         /etc/xdg/openbox/rc.xml
 fi
 
+# Optionaler GPU Task Manager (--gputaskman): Menüeintrag neben htop/btop und
+# ebenfalls maximiert öffnen. Mit sudo, damit auch fremde Prozesse sichtbar sind.
+if [ -x /usr/bin/gputaskman ]; then
+    if [ -f /etc/xdg/openbox/rc.xml ] && ! grep -q 'title="gputaskman"' /etc/xdg/openbox/rc.xml; then
+        sed -i 's|</applications>|  <application class="XTerm" title="gputaskman"><maximized>yes</maximized></application>\n</applications>|' \
+            /etc/xdg/openbox/rc.xml
+    fi
+    menu=/etc/skel/.config/openbox/menu.xml
+    if [ -f "$menu" ] && ! grep -q 'gputaskman' "$menu"; then
+        sed -i 's|^\( *\)<item label="btop">.*$|&\n\1<item label="GPU Task Manager (gputaskman)"><action name="Execute"><command>x-terminal-emulator -T gputaskman -e sudo gputaskman</command></action></item>|' "$menu"
+    fi
+fi
+
 # Icon-Cache für Taskleisten-Icons
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true

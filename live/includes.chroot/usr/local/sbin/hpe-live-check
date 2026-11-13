@@ -89,6 +89,10 @@ if package_installed memtest86+ && ls /boot/memtest86+* >/dev/null 2>&1; then
 else
     bad "memtest86+ Paket"
 fi
+if [ "${GPUTASKMAN_VERSION:-none}" != none ]; then
+    check_cmd gputaskman
+    check_file /opt/gputaskman/_internal
+fi
 echo "Netzwerk:"
 check_cmd ethtool mstlink sshd hpe-live-ssh hpe-live-collect-logs hpe-live-collect-samples hwtest-pack-reports zip NetworkManager nmcli nmtui nm-applet nm-connection-editor
 if grep -qx 'PasswordAuthentication yes' /etc/ssh/sshd_config.d/10-hpe-live.conf 2>/dev/null; then ok "sshd: Passwort-Login erlaubt"; else bad "sshd: Passwort-Login gesperrt"; fi

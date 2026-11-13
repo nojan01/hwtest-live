@@ -16,6 +16,7 @@ JSON_VIEWER="${JSON_VIEWER:-latest}"        # latest | Pfad zu *_amd64.deb
 ILOREST="${ILOREST:-latest}"                # latest | none | Pfad zu ilorest-*.rpm oder *.deb
 FREE="${FREE:-0}"                           # 1 = freie Variante
 BTOP="${BTOP:-backport}"                     # backport | trixie | Pfad zu btop_*_amd64.deb
+GPUTASKMAN="${GPUTASKMAN:-none}"            # none | Pfad zu gputaskman_*_amd64.deb (GPU-Prozessmonitor im Terminal, MIT)
 MEMTEST86="${MEMTEST86:-none}"              # none | Pfad zu memtest86-usb.img oder entpacktem Ordner (PassMark, UEFI)
 VENDOR_TOOLS="${VENDOR_TOOLS:-none}"        # none | Ordner mit Hersteller-Paketen (.deb/.rpm: qaucli, hbacmd, MFT, ...) -> internes ISO
 STRIP_KERNEL_MODULES="${STRIP_KERNEL_MODULES:-1}"
@@ -57,6 +58,8 @@ Aufruf: sudo $0 [Optionen]
   --btop backport|trixie|DATEI btop-Version (Default: backport = 1.4.7 aus sid,
                                   zeigt auch bei vielen Kernen die Einzelkerne;
                                   trixie = Paket aus trixie, 1.3.2)
+  --gputaskman none|DATEI      GPU Task Manager (gputaskman, MIT) als Terminalprogramm wie
+                                  htop/btop mitinstallieren (.deb). Default: none
   --memtest86 none|DATEI|DIR   PassMark MemTest86 (UEFI) zusätzlich ins Bootmenü:
                                   memtest86-usb.img aus dem PassMark-ZIP oder ein
                                   Ordner mit BOOTX64.efi (bzw. EFI/BOOT/BOOTX64.efi).
@@ -90,6 +93,7 @@ while [ $# -gt 0 ]; do
         --memtest86) MEMTEST86="$2"; shift 2 ;;
         --vendor-tools) VENDOR_TOOLS="$2"; shift 2 ;;
         --btop) BTOP="$2"; shift 2 ;;
+        --gputaskman) GPUTASKMAN="$2"; shift 2 ;;
         --free) FREE=1; shift ;;
         --no-strip-modules) STRIP_KERNEL_MODULES=0; shift ;;
         --mirror) MIRROR="$2"; shift 2 ;;
@@ -414,6 +418,11 @@ case "$BTOP" in
     backport) BTOP_DEB="$(fetch_btop_backport)" ;;
     *) BTOP_DEB="$(resolve_deb "$BTOP" "" "")" ;;
 esac
+GTM_DEB=""
+case "$GPUTASKMAN" in
+    none|"") GPUTASKMAN=none ;;
+    *) GTM_DEB="$(resolve_deb "$GPUTASKMAN" "" "")" ;;
+esac
 
 deb_field() { dpkg-deb -f "$1" "$2"; }
 HT_VER="$(deb_field "$HT_DEB" Version)"
@@ -423,6 +432,8 @@ echo "  Hardwaretest: $HT_DEB ($HT_VER)"
 echo "  JSON Viewer:  $JV_DEB ($JV_VER)"
 echo "  iLOrest:      ${ILO_DEB:-<keins>} ${ILO_VER}"
 echo "  btop:         ${BTOP_DEB:-<trixie-Paket>} ${BTOP_DEB:+$(deb_field "$BTOP_DEB" Version)}"
+GTM_VER="${GTM_DEB:+$(deb_field "$GTM_DEB" Version)}"
+echo "  gputaskman:   ${GTM_DEB:-<keins>} ${GTM_VER}"
 
 # ------------------------------------------------------------ lb config ------
 log "Bereite Build-Verzeichnis vor: $BUILD_DIR"
@@ -508,6 +519,7 @@ cp "$HT_DEB" "config/packages.chroot/hardwaretest_${HT_VER}_amd64.deb"
 cp "$JV_DEB" "config/packages.chroot/$(deb_field "$JV_DEB" Package)_${JV_VER}_amd64.deb"
 [ -z "$ILO_DEB" ] || cp "$ILO_DEB" "config/packages.chroot/ilorest_${ILO_VER}_amd64.deb"
 [ -z "$BTOP_DEB" ] || cp "$BTOP_DEB" "config/packages.chroot/btop_$(deb_field "$BTOP_DEB" Version)_amd64.deb"
+[ -z "$GTM_DEB" ] || cp "$GTM_DEB" "config/packages.chroot/gputaskman_${GTM_VER}_amd64.deb"
 if [ "$VENDOR_TOOLS" != none ]; then
     log "Hersteller-Werkzeuge (internes ISO): ${#VENDOR_PKGS[@]} Paket(e), ${#VENDOR_EXTRA[@]} Archiv(e)/Binaries aus $VENDOR_TOOLS"
     mkdir -p config/includes.chroot/var/lib/hpe-live
@@ -555,6 +567,7 @@ HPE_LIVE_GIT=$(git -C "$REPO_DIR" describe --always --dirty 2>/dev/null || echo 
 HARDWARETEST_VERSION=${HT_VER}
 JSON_VIEWER_VERSION=${JV_VER}
 ILOREST_VERSION=${ILO_VER:-none}
+GPUTASKMAN_VERSION=${GTM_VER:-none}
 MEMTEST86=$([ "$MEMTEST86" = none ] && echo none || echo passmark)
 EOF
 
