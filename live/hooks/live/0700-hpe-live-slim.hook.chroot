@@ -9,6 +9,12 @@ KVER=$(ls /lib/modules | sort -V | tail -n1)
 M="/lib/modules/${KVER}/kernel"
 
 if [ "${STRIP_KERNEL_MODULES}" = "1" ] && [ -d "$M" ]; then
+    graphics=""
+    for mod in i915 xe amdgpu radeon nouveau drm_display_helper cec; do
+        if modinfo -k "${KVER}" "$mod" >/dev/null 2>&1; then
+            graphics="$graphics $mod"
+        fi
+    done
     before=$(du -sm "$M" | cut -f1)
     for d in \
         sound \
@@ -51,7 +57,7 @@ if [ "${STRIP_KERNEL_MODULES}" = "1" ] && [ -d "$M" ]; then
     # "depends"-Kette der Grafiktreiber rekursiv gegen das Dateisystem prüfen.
     missing=""
     checked=" "
-    queue="i915 xe amdgpu radeon nouveau drm_display_helper cec"
+    queue="$graphics"
     while [ -n "$queue" ]; do
         set -- $queue
         [ $# -gt 0 ] || break
@@ -59,7 +65,7 @@ if [ "${STRIP_KERNEL_MODULES}" = "1" ] && [ -d "$M" ]; then
         case "$checked" in *" $mod "*) continue;; esac
         checked="$checked$mod "
         file=$(modinfo -k "${KVER}" -n "$mod" 2>/dev/null || true)
-        if [ -z "$file" ] || [ ! -f "$file" ]; then
+        if [ "$file" != "(builtin)" ] && { [ -z "$file" ] || [ ! -f "$file" ]; }; then
             missing="$missing $mod"
             continue
         fi
@@ -97,9 +103,19 @@ DCGM=/usr/libexec/datacenter-gpu-manager-4
 if [ -d "$DCGM" ]; then
     before=$(du -sm "$DCGM" | cut -f1)
     rm -f "$DCGM"/cuda*/lib/libcusparseLt* "$DCGM"/cuda*/lib/libcurand* "$DCGM"/cuda*/lib/libnccl* \
-        "$DCGM"/plugins/cuda*/libNcclTests* 2>/dev/null || true
+        "$DCGM"/cuda*/lib/updated/libcusparseLt* "$DCGM"/cuda*/lib/updated/libcurand* \
+        "$DCGM"/cuda*/lib/updated/libnccl* "$DCGM"/plugins/cuda*/libNcclTests*
     echo "hpe-live: DCGM ${before} MB -> $(du -sm "$DCGM" | cut -f1) MB (ohne cuSPARSELt/cuRAND/NCCL)"
 fi
+
+# Alma installiert diese Treiberdateien per RPM; Debian schliesst sie bereits
+# beim Entpacken aus. CUDA, NVML, cuBLAS und die Grafiktreiber bleiben erhalten.
+for libdir in /usr/lib64 /usr/lib/x86_64-linux-gnu; do
+    rm -f "$libdir"/libnvoptix.so* "$libdir"/libnvidia-opencl.so* \
+        "$libdir"/libnvcuvid.so* "$libdir"/libcudadebugger.so* \
+        "$libdir"/libnvidia-present.so*
+done
+rm -f /usr/share/nvidia/nvoptix.bin
 
 # NVIDIA MFT: Register-Dump-Datenbanken (mstdump, ~50 MB) werden nicht benötigt;
 # mlxconfig/mlxfwmanager/mlxlink arbeiten ohne sie.

@@ -12,7 +12,7 @@ WRAP=/usr/local/lib/hpe-live/clean-exec
 chmod 0755 "$WRAP"
 
 LDSO=$(ls /lib64/ld-linux-x86-64.so.2 /usr/lib64/ld-linux-x86-64.so.2 2>/dev/null | head -n1)
-LIBPATH="$BUNDLE:/usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu/systemd"
+LIBPATH="$BUNDLE:/usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu/systemd:/usr/lib64:/usr/lib64/systemd"
 
 link() { # $1 = /usr/bin/<name> oder /usr/sbin/<name>
     name=${1##*/}
@@ -34,7 +34,7 @@ done
 
 # Terminals immer kapseln: alles, was Hardwaretest darin startet (journalctl -kf,
 # btop, Shell), läuft dann mit sauberer Umgebung.
-for t in /usr/bin/xterm /usr/bin/x-terminal-emulator; do
+for t in /usr/bin/xterm /usr/bin/x-terminal-emulator /usr/bin/xfce4-terminal; do
     [ -e "$t" ] && link "$t" >/dev/null && count=$((count + 1))
 done
 

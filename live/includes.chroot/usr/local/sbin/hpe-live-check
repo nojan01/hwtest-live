@@ -22,6 +22,13 @@ check_cmd() {
 check_file() {
     if [ -e "$1" ]; then ok "$1"; else bad "Datei $1"; fi
 }
+package_installed() {
+    if [ "${HPE_LIVE_DISTRO:-}" = almalinux9 ]; then
+        rpm -q "$1" >/dev/null 2>&1
+    else
+        dpkg-query -W -f='${db:Status-Abbrev}' "$1" 2>/dev/null | grep -q '^ii'
+    fi
+}
 check_mod() {
     top=$1
     if ! modinfo -k "$KVER" "$top" >/dev/null 2>&1; then bad "Kernelmodul $top (Kernel $KVER)"; return; fi
@@ -51,9 +58,13 @@ echo "Hardwaretest Live Systemcheck (Variante: $VARIANT, Kernel: $KVER)"
 echo "Apps:"
 check_cmd hardwaretest
 check_file /opt/hardwaretest/hardwaretest
-check_file /usr/bin/app
-check_cmd hpe-live-json-viewer surf firefox
-if [ "$(command -v app)" = /usr/local/bin/app ]; then ok "app -> /usr/local/bin/app (JSON Viewer aus Hardwaretest)"; else bad "app nicht als /usr/local/bin/app im PATH"; fi
+if [ "${HPE_LIVE_DISTRO:-}" = almalinux9 ]; then
+    check_cmd hpe-live-browser firefox
+else
+    check_file /usr/bin/app
+    check_cmd hpe-live-json-viewer surf firefox
+    if [ "$(command -v app)" = /usr/local/bin/app ]; then ok "app -> /usr/local/bin/app (JSON Viewer aus Hardwaretest)"; else bad "app nicht als /usr/local/bin/app im PATH"; fi
+fi
 if [ -d /opt/hardwaretest/_internal ]; then
     for t in journalctl fio xterm; do
         if env LD_LIBRARY_PATH=/opt/hardwaretest/_internal "$t" --version >/dev/null 2>&1 \
@@ -72,8 +83,8 @@ fi
 echo "Diagnose-Tools:"
 check_cmd btop htop stress-ng fio iperf3 nvme smartctl hdparm sg_inq mdadm lvm pvs \
     lsblk swapon swapoff mkfs.ext4 lshw lspci lsusb dmidecode sensors edac-util ras-mc-ctl \
-    ipmitool jq pkexec sudo zpool zfs fastfetch zramctl
-if dpkg -s memtest86+ >/dev/null 2>&1 && ls /boot/memtest86+* >/dev/null 2>&1; then
+    ipmitool jq pkexec sudo zpool zfs fastfetch zramctl gparted
+if package_installed memtest86+ && ls /boot/memtest86+* >/dev/null 2>&1; then
     ok "memtest86+ (Paket, fuer Hardwaretest-Pruefung)"
 else
     bad "memtest86+ Paket"
@@ -87,9 +98,9 @@ if [ -s /var/lib/hpe-live/vendor-tools ]; then
     echo "Hersteller-Werkzeuge (internes ISO, --vendor-tools):"
     while read -r pkg ver; do
         [ -n "$pkg" ] || continue
-        if dpkg-query -W -f='${db:Status-Abbrev}' "$pkg" 2>/dev/null | grep -q '^ii'; then ok "Paket $pkg $ver"; else bad "Paket $pkg $ver"; fi
+        if package_installed "$pkg"; then ok "Paket $pkg $ver"; else bad "Paket $pkg $ver"; fi
     done </var/lib/hpe-live/vendor-tools
-    for c in qaucli qlnxcli hbacmd mst mlxlink mlxcables mlxconfig mlxfwmanager flint niccli bnxtnvm nvmupdate64e epct64e epct sfupdate sfreport sfboot; do
+    for c in qaucli QCScli qlnxcli hbacmd mst mlxlink mlxcables mlxconfig mlxfwmanager flint niccli bnxtnvm nvmupdate64e epct64e epct sfupdate sfreport sfboot; do
         p=$(command -v "$c" 2>/dev/null) || p=$(find /opt /usr/local/sbin -maxdepth 6 -type f -name "$c" 2>/dev/null | head -n1)
         [ -z "$p" ] || ok "$c ($p)"
     done
@@ -106,16 +117,18 @@ echo "Grafik (AMD, Intel, NVIDIA):"
 check_mod amdgpu
 check_mod radeon
 check_mod i915
-check_mod xe
+if [ "${HPE_LIVE_DISTRO:-}" != almalinux9 ]; then check_mod xe; fi
 check_mod nouveau
 check_file /lib/firmware/amdgpu
 check_file /lib/firmware/i915
-check_file /lib/firmware/xe
+if [ "${HPE_LIVE_DISTRO:-}" != almalinux9 ]; then check_file /lib/firmware/xe; fi
 check_file /lib/firmware/nvidia
 check_cmd python3
 if python3 -I -c "import ctypes, json, argparse" 2>/dev/null; then ok "python3 ctypes/json"; else bad "python3 ctypes/json"; fi
 check_cmd vulkaninfo
-for icd in radeon intel nouveau; do
+icds="radeon intel"
+[ "${HPE_LIVE_DISTRO:-}" = almalinux9 ] || icds="$icds nouveau"
+for icd in $icds; do
     if ls /usr/share/vulkan/icd.d/${icd}_icd*.json >/dev/null 2>&1; then ok "Vulkan-Treiber ${icd}"; else bad "Vulkan-Treiber ${icd}"; fi
 done
 if [ "$VARIANT" != "none" ] && [ "$MODE" != "--build" ] && grep -qw 'hpe-live.nouveau' /proc/cmdline; then

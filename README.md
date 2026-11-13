@@ -87,6 +87,14 @@ Mit NVIDIA‑Treiber (`dcgm`, `driver`) ist nouveau per Kernel‑Parameter `modp
 Der Treiber kommt aus dem NVIDIA CUDA‑Repo für Debian 13, nicht aus Debian. Debians Treiber 550 lässt sich gegen den aktuellen Trixie‑Kernel (6.12.x) nicht mehr bauen (`pci_resize_resource`). Die Version ist per APT‑Pinning fest (`--nvidia-version`, Standard 595.91.07). Große, unnötige Treiberbibliotheken (OptiX, OpenCL, NVDEC; bei `driver` auch CUDA/PTX‑JIT) werden per `dpkg path-exclude` nicht installiert (`live/optional/nvidia/includes.chroot_before_packages/etc/dpkg/dpkg.cfg.d/`).
 Compiler, Header und DKMS werden nach dem Modulbau wieder aus dem Image entfernt.
 
+## AlmaLinux 9
+
+Eine öffentliche RPM-basierte Alternative liegt unter [`alma/`](alma/README.md).
+Sie übernimmt die aktuellen Live-Skripte, iLO-Tastenkürzel, gparted und die
+Verkleinerungen des Debian-Images. Hardwaretest wird als aktuelles EL9-RPM
+eingebunden; HTML-/JSON-Berichte zeigt dort der GTK-/WebKit-Berichtsbrowser.
+Zusätzliche proprietäre NIC-/HBA-Werkzeuge und MemTest86 Pro sind nicht enthalten.
+
 ## Bauen
 
 Benötigt: Internetzugang, ca. 30 GB freien Platz (`none`/`driver`: ca. 15 GB), root‑Rechte.

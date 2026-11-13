@@ -1,0 +1,16 @@
+# HPE Software Delivery Repository – Management Component Pack für AlmaLinux 9
+# (ssacli, ssaducli, hponcfg, storcli, storcli2, amsd) und ilorest.
+# Key: https://downloads.linux.hpe.com/SDR/hpePublicKey2048_key2.pub
+[hpe-mcp]
+name=HPE Management Component Pack (AlmaLinux 9)
+baseurl=https://downloads.linux.hpe.com/SDR/repo/mcp/Alma/9/x86_64/current/
+enabled=1
+gpgcheck=1
+gpgkey=https://downloads.linux.hpe.com/SDR/hpePublicKey2048_key2.pub
+
+[hpe-ilorest]
+name=HPE iLOrest (RHEL 9)
+baseurl=https://downloads.linux.hpe.com/SDR/repo/ilorest/rhel/9/x86_64/current/
+enabled=1
+gpgcheck=1
+gpgkey=https://downloads.linux.hpe.com/SDR/hpePublicKey2048_key2.pub

@@ -1,0 +1,324 @@
+#!/usr/bin/python3
+"""Kleiner Berichts-Browser für das Live-System (GTK3 + WebKitGTK).
+
+Ersatz für Firefox: zeigt HTML-Berichte des Hardwaretests an und rendert
+JSON-Dateien als aufklappbaren Baum (Firefox-JSON-Ansicht nachempfunden).
+Aufruf: hpe-live-browser [DATEI|URL ...]   – je Argument ein Fenster.
+
+Tasten: Strg+P drucken, Strg+F suchen, Strg+Plus/Minus/0 Zoom, F5 neu laden,
+Alt+Links/Rechts zurück/vor, Strg+Q oder Escape schließen.
+"""
+import html
+import json
+import os
+import sys
+import urllib.parse
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+for _ver in ("4.1", "4.0"):
+    try:
+        gi.require_version("WebKit2", _ver)
+        break
+    except ValueError:
+        continue
+from gi.repository import Gdk, Gtk, WebKit2  # noqa: E402
+
+JSON_TEMPLATE = """<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>__TITLE__</title>
+<style>
+ body{font-family:"DejaVu Sans",sans-serif;font-size:13px;margin:0;background:#fff;color:#222}
+ #bar{position:sticky;top:0;background:#f3f3f3;border-bottom:1px solid #ccc;padding:6px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+ #bar b{margin-right:auto;font-weight:600;color:#444}
+ #bar button{padding:2px 8px}
+ #bar input{padding:2px 6px;min-width:220px}
+ #tree,#raw{padding:8px 12px 20px 12px;font-family:"DejaVu Sans Mono",monospace;font-size:12.5px;line-height:1.45}
+ #raw{white-space:pre;display:none}
+ details{margin-left:1.2em}
+ #tree>details{margin-left:0}
+ summary{cursor:pointer;list-style:none;outline:none}
+ summary::-webkit-details-marker{display:none}
+ summary::before{content:"\\25B6";display:inline-block;width:1em;color:#777;font-size:10px}
+ details[open]>summary::before{content:"\\25BC"}
+ .row{margin-left:1.2em;padding-left:1em}
+ .k{color:#0b3d91}.s{color:#1a7f37}.n{color:#b3261e}.b{color:#7a2fb5}.z{color:#888;font-style:italic}
+ .c{color:#999;font-size:11px;margin-left:.5em}
+ .hit{background:#fff3a0}
+ .err{color:#b3261e;padding:12px}
+</style></head><body>
+<div id="bar"><b>__TITLE__</b>
+ <input id="q" type="search" placeholder="Filtern (Schlüssel oder Wert)">
+ <button onclick="setAll(true)">Alles aufklappen</button>
+ <button onclick="setAll(false)">Alles einklappen</button>
+ <button id="rawbtn" onclick="toggleRaw()">Rohdaten</button>
+</div>
+<div id="tree"></div><pre id="raw">__RAW__</pre>
+<script id="d" type="application/json">__DATA__</script>
+<script>
+(function(){
+ var data, root=document.getElementById('tree');
+ try{ data=JSON.parse(document.getElementById('d').textContent); }
+ catch(e){ root.innerHTML='<div class="err">Ungültiges JSON: '+e.message+'</div>'; toggleRaw(); return; }
+ function esc(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+ function leaf(v){
+   if(v===null) return '<span class="z">null</span>';
+   switch(typeof v){
+     case 'string': return '<span class="s">"'+esc(v)+'"</span>';
+     case 'number': return '<span class="n">'+v+'</span>';
+     case 'boolean': return '<span class="b">'+v+'</span>';
+   }
+   return esc(v);
+ }
+ function node(key,v,depth){
+   var label = key===null ? '' : '<span class="k">'+esc(key)+'</span>: ';
+   if(v!==null && typeof v==='object'){
+     var arr=Array.isArray(v), keys=Object.keys(v);
+     var d=document.createElement('details'); if(depth<2) d.open=true;
+     var sum=document.createElement('summary');
+     sum.innerHTML=label+(arr?'[':'{')+'<span class="c">'+keys.length+(arr?' Einträge':' Felder')+'</span>'+(arr?']':'}');
+     d.appendChild(sum);
+     if(!keys.length){ d.open=false; }
+     keys.forEach(function(k){ d.appendChild(node(arr?null:k,v[k],depth+1)); });
+     return d;
+   }
+   var r=document.createElement('div'); r.className='row'; r.innerHTML=label+leaf(v); return r;
+ }
+ root.appendChild(node(null,data,0));
+ window.setAll=function(open){ root.querySelectorAll('details').forEach(function(d){d.open=open;}); };
+ window.toggleRaw=function(){
+   var raw=document.getElementById('raw'), show=raw.style.display!=='block';
+   raw.style.display=show?'block':'none'; root.style.display=show?'none':'block';
+   document.getElementById('rawbtn').textContent=show?'Baumansicht':'Rohdaten';
+ };
+ var q=document.getElementById('q'), timer=null;
+ q.addEventListener('input',function(){
+   clearTimeout(timer); timer=setTimeout(function(){
+     var t=q.value.trim().toLowerCase();
+     root.querySelectorAll('.hit').forEach(function(e){e.classList.remove('hit');});
+     if(!t) return;
+     root.querySelectorAll('.row,summary').forEach(function(e){
+       if(e.textContent.toLowerCase().indexOf(t)>=0){
+         e.classList.add('hit');
+         var p=e.parentElement; while(p && p!==root){ if(p.tagName==='DETAILS') p.open=true; p=p.parentElement; }
+       }
+     });
+     var first=root.querySelector('.hit'); if(first) first.scrollIntoView({block:'center'});
+   },150);
+ });
+})();
+</script></body></html>
+"""
+
+
+def json_to_html(path: str) -> str:
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    try:
+        pretty = json.dumps(json.loads(text), indent=2, ensure_ascii=False)
+    except ValueError:
+        pretty = text
+    # "</" darf innerhalb von <script> nicht vorkommen
+    data = text.replace("</", "<\\/")
+    return (JSON_TEMPLATE
+            .replace("__TITLE__", html.escape(os.path.basename(path)))
+            .replace("__DATA__", data)
+            .replace("__RAW__", html.escape(pretty)))
+
+
+def to_uri(arg: str) -> str:
+    if "://" in arg or arg.startswith(("about:", "data:")):
+        return arg
+    if os.path.exists(arg):
+        return "file://" + urllib.parse.quote(os.path.abspath(arg))
+    return "https://" + arg if "." in arg and " " not in arg else arg
+
+
+class Browser(Gtk.Window):
+    def __init__(self, target: str = None):
+        super().__init__(title="Webbrowser")
+        self.set_default_size(1100, 800)
+        self.connect("destroy", self._on_destroy)
+
+        settings = WebKit2.Settings()
+        settings.set_enable_javascript(True)
+        settings.set_allow_file_access_from_file_urls(True)
+        settings.set_allow_universal_access_from_file_urls(True)
+        settings.set_enable_smooth_scrolling(True)
+        self.view = WebKit2.WebView.new_with_settings(settings)
+        self.view.connect("notify::title", self._on_title)
+        self.view.connect("notify::uri", self._on_uri)
+        self.view.connect("load-changed", self._on_load)
+        self.view.connect("create", lambda v, nav: self._open_new(nav))
+        self.view.connect("decide-policy", self._on_policy)
+
+        bar = Gtk.Toolbar()
+        bar.set_style(Gtk.ToolbarStyle.ICONS)
+        bar.set_icon_size(Gtk.IconSize.SMALL_TOOLBAR)
+        self.back = self._tool(bar, "go-previous-symbolic", "Zurück (Alt+Links)", lambda *_: self.view.go_back())
+        self.fwd = self._tool(bar, "go-next-symbolic", "Vor (Alt+Rechts)", lambda *_: self.view.go_forward())
+        self._tool(bar, "view-refresh-symbolic", "Neu laden (F5)", lambda *_: self.view.reload())
+        self.url = Gtk.Entry()
+        self.url.connect("activate", lambda e: self.load(e.get_text()))
+        item = Gtk.ToolItem(); item.set_expand(True); item.add(self.url); bar.insert(item, -1)
+        self._tool(bar, "edit-find-symbolic", "Suchen (Strg+F)", lambda *_: self._toggle_find())
+        self._tool(bar, "zoom-out-symbolic", "Verkleinern (Strg+-)", lambda *_: self.zoom(-0.1))
+        self._tool(bar, "zoom-in-symbolic", "Vergrößern (Strg++)", lambda *_: self.zoom(+0.1))
+        self._tool(bar, "document-print-symbolic", "Drucken (Strg+P)", lambda *_: self.print_page())
+
+        self.find_bar = Gtk.Box(spacing=6, border_width=4)
+        self.find_entry = Gtk.SearchEntry()
+        self.find_entry.connect("search-changed", self._on_find)
+        self.find_entry.connect("activate", lambda *_: self.view.get_find_controller().search_next())
+        self.find_entry.connect("stop-search", lambda *_: self._toggle_find(False))
+        self.find_bar.pack_start(Gtk.Label(label="Suchen:"), False, False, 0)
+        self.find_bar.pack_start(self.find_entry, True, True, 0)
+        b_prev = Gtk.Button.new_from_icon_name("go-up-symbolic", Gtk.IconSize.BUTTON)
+        b_prev.connect("clicked", lambda *_: self.view.get_find_controller().search_previous())
+        b_next = Gtk.Button.new_from_icon_name("go-down-symbolic", Gtk.IconSize.BUTTON)
+        b_next.connect("clicked", lambda *_: self.view.get_find_controller().search_next())
+        self.find_bar.pack_start(b_prev, False, False, 0)
+        self.find_bar.pack_start(b_next, False, False, 0)
+        self.find_bar.set_no_show_all(True)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.pack_start(bar, False, False, 0)
+        box.pack_start(self.find_bar, False, False, 0)
+        box.pack_start(self.view, True, True, 0)
+        self.add(box)
+        self.connect("key-press-event", self._on_key)
+        self.show_all()
+        if target:
+            self.load(target)
+        self.view.grab_focus()
+
+    @staticmethod
+    def _tool(bar, icon, tip, cb):
+        btn = Gtk.ToolButton()
+        btn.set_icon_name(icon)
+        btn.set_tooltip_text(tip)
+        btn.connect("clicked", cb)
+        bar.insert(btn, -1)
+        return btn
+
+    def load(self, target: str) -> None:
+        uri = to_uri(target)
+        path = urllib.parse.unquote(uri[7:]) if uri.startswith("file://") else None
+        if path and path.lower().endswith(".json") and os.path.isfile(path):
+            base = "file://" + urllib.parse.quote(os.path.dirname(path)) + "/"
+            try:
+                self.view.load_html(json_to_html(path), base)
+            except OSError as exc:
+                self.view.load_html(f"<p class='err'>{html.escape(str(exc))}</p>", base)
+            self.url.set_text(uri)
+            self.set_title(os.path.basename(path))
+            return
+        self.view.load_uri(uri)
+
+    def zoom(self, delta: float) -> None:
+        self.view.set_zoom_level(max(0.3, min(4.0, self.view.get_zoom_level() + delta)))
+
+    def print_page(self) -> None:
+        WebKit2.PrintOperation.new(self.view).run_dialog(self)
+
+    def _toggle_find(self, show=None) -> None:
+        visible = self.find_bar.get_visible() if show is None else not show
+        if visible:
+            self.find_bar.hide()
+            self.view.get_find_controller().search_finish()
+            self.view.grab_focus()
+        else:
+            self.find_bar.show()
+            self.find_entry.show_all()
+            for child in self.find_bar.get_children():
+                child.show_all()
+            self.find_entry.grab_focus()
+
+    def _on_find(self, entry) -> None:
+        text = entry.get_text()
+        ctl = self.view.get_find_controller()
+        if text:
+            ctl.search(text, WebKit2.FindOptions.CASE_INSENSITIVE | WebKit2.FindOptions.WRAP_AROUND, 10000)
+        else:
+            ctl.search_finish()
+
+    def _on_title(self, view, _param) -> None:
+        self.set_title(view.get_title() or "Webbrowser")
+
+    def _on_uri(self, view, _param) -> None:
+        uri = view.get_uri()
+        if uri and not uri.startswith("about:"):
+            self.url.set_text(uri)
+
+    def _on_load(self, view, _event) -> None:
+        self.back.set_sensitive(view.can_go_back())
+        self.fwd.set_sensitive(view.can_go_forward())
+
+    def _on_policy(self, view, decision, dtype) -> bool:
+        # Angeklickte Links auf JSON-Dateien ebenfalls als Baum darstellen
+        if dtype == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
+            action = decision.get_navigation_action()
+            uri = action.get_request().get_uri()
+            if (action.get_navigation_type() == WebKit2.NavigationType.LINK_CLICKED
+                    and uri.startswith("file://") and uri.lower().endswith(".json")):
+                decision.ignore()
+                self.load(uri)
+                return True
+        return False
+
+    def _open_new(self, nav):
+        win = Browser()
+        win.load(nav.get_request().get_uri())
+        return None
+
+    def _on_key(self, _w, ev) -> bool:
+        ctrl = ev.state & Gdk.ModifierType.CONTROL_MASK
+        alt = ev.state & Gdk.ModifierType.MOD1_MASK
+        key = Gdk.keyval_name(ev.keyval) or ""
+        if ctrl and key in ("q", "w") or key == "Escape" and not self.find_bar.get_visible():
+            self.destroy()
+        elif key == "Escape":
+            self._toggle_find(False)
+        elif ctrl and key == "p":
+            self.print_page()
+        elif ctrl and key == "f":
+            self._toggle_find(True)
+        elif ctrl and key == "l":
+            self.url.grab_focus()
+        elif ctrl and key in ("plus", "equal", "KP_Add"):
+            self.zoom(+0.1)
+        elif ctrl and key in ("minus", "KP_Subtract"):
+            self.zoom(-0.1)
+        elif ctrl and key in ("0", "KP_0"):
+            self.view.set_zoom_level(1.0)
+        elif key == "F5" or (ctrl and key == "r"):
+            self.view.reload()
+        elif alt and key == "Left":
+            self.view.go_back()
+        elif alt and key == "Right":
+            self.view.go_forward()
+        else:
+            return False
+        return True
+
+    @staticmethod
+    def _on_destroy(_w) -> None:
+        Browser.open_windows -= 1
+        if Browser.open_windows <= 0:
+            Gtk.main_quit()
+
+    open_windows = 0
+
+
+def main(argv) -> int:
+    targets = [a for a in argv[1:] if not a.startswith("-")] or [None]
+    for t in targets:
+        Browser.open_windows += 1
+        Browser(t)
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
